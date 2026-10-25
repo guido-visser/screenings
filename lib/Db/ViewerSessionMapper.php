@@ -29,6 +29,23 @@ class ViewerSessionMapper extends QBMapper {
 	}
 
 	/**
+	 * @param int[] $inviteIds
+	 * @return ViewerSession[] newest first
+	 */
+	public function findForInvites(array $inviteIds): array {
+		if ($inviteIds === []) {
+			return [];
+		}
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->in('invite_id', $qb->createNamedParameter($inviteIds, IQueryBuilder::PARAM_INT_ARRAY)))
+			->orderBy('started_at', 'DESC')
+			->addOrderBy('id', 'DESC');
+		return $this->findEntities($qb);
+	}
+
+	/**
 	 * Ends every still-open session of an invite.
 	 */
 	public function endOpenForInvite(int $inviteId, int $now): void {

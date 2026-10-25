@@ -31,6 +31,8 @@
 			<ScreeningView v-else-if="selectedId !== null"
 				:key="selectedId"
 				:screening-id="selectedId"
+				:view="route.view"
+				:invite-id="route.inviteId"
 				@updated="onUpdated"
 				@deleted="onDeleted" />
 			<NcEmptyContent v-else
@@ -81,10 +83,12 @@ import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import api, { errorMessage } from './api.js'
 import ScreeningView from './components/ScreeningView.vue'
+import { navigate, parseHash, screeningHash } from './router.js'
 
 const screenings = ref([])
 const loading = ref(true)
-const selectedId = ref(idFromHash())
+const route = ref(parseHash())
+const selectedId = computed(() => route.value.screeningId)
 const showCreate = ref(false)
 const newTitle = ref('')
 
@@ -98,22 +102,13 @@ const createButtons = computed(() => [{
 	callback: async () => (await create()) ? undefined : false,
 }])
 
-function idFromHash() {
-	const match = window.location.hash.match(/^#\/screenings\/(\d+)/)
-	return match ? Number(match[1]) : null
-}
-
 function onHashChange() {
-	selectedId.value = idFromHash()
+	route.value = parseHash()
 }
 
-function screeningHash(id) {
-	return `#/screenings/${id}`
-}
-
-function select(id) {
-	window.location.hash = id === null ? '' : screeningHash(id)
-	selectedId.value = id
+function select(id, view = 'dashboard') {
+	navigate(id, view)
+	route.value = parseHash()
 }
 
 async function load() {
@@ -136,7 +131,8 @@ async function create() {
 		screenings.value.unshift({ ...screening, inviteCount: 0 })
 		showCreate.value = false
 		newTitle.value = ''
-		select(screening.id)
+		// A new screening has nothing to show yet; start in its settings.
+		select(screening.id, 'settings')
 		return true
 	} catch (error) {
 		showError(errorMessage(error, t('screenings', 'Could not create the screening')))

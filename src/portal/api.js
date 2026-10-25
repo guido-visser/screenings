@@ -51,6 +51,16 @@ export default {
 	},
 
 	/** The result has `mailError` when the invite was created but the email failed. */
+	async dashboard(screeningId) {
+		return (await axios.get(url(`/screenings/${screeningId}/dashboard`))).data
+	},
+	async live(screeningId) {
+		return (await axios.get(url(`/screenings/${screeningId}/live`))).data
+	},
+	async viewerActivity(inviteId, before = null) {
+		return (await axios.get(url(`/invites/${inviteId}/activity`), { params: before ? { before } : {} })).data
+	},
+
 	async createInvite(screeningId, name, email, sendEmail = false, message = '') {
 		return (await axios.post(url(`/screenings/${screeningId}/invites`), { name, email, sendEmail, message })).data
 	},

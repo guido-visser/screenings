@@ -47,6 +47,17 @@ docker compose exec -u www-data nextcloud php occ screenings:process-media <scre
 
 Add `--force` to process media that is already ready or failed.
 
+## Tracking and the dashboard
+
+Each screening has a **Dashboard** tab that shows:
+- **Totals:** invited, opened the link, started watching, watching now, average watched.
+- **Heatmap:** which parts of the film viewers actually played.
+- **Viewer table:** live status, how much each person watched, how far they got, how often they opened the link, and their device and location.
+
+Click a viewer to see their sessions (device, screen, location, IP), a heatmap of how often they watched each part, and a filterable timeline of everything they did. Live data refreshes every 5 seconds.
+
+**Viewer location** is optional (*Administration settings → Screenings*). It uses a MaxMind GeoLite2/GeoIP2 City database on the server. Behind a reverse proxy, set Nextcloud's [`trusted_proxies`](https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/reverse_proxy_configuration.html) correctly, or every viewer shows the proxy's address. The IP-bound playback tokens need it too.
+
 ## How playback is protected
 
 Every media request (`/apps/screenings/stream/<session>/…`) must have:

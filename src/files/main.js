@@ -81,6 +81,8 @@ function icon(path) {
 async function openOrCreate(node) {
 	try {
 		let id = (await refreshScreenings())[node.fileid]
+		// Existing screenings open on their dashboard, new ones on their settings.
+		let view = ''
 		if (id === undefined) {
 			const mode = deliveryMode(node)
 			const screening = await api.createScreening({
@@ -89,8 +91,9 @@ async function openOrCreate(node) {
 				sourcePath: node.path,
 			})
 			id = screening.id
+			view = '/settings'
 		}
-		window.location.href = generateUrl('/apps/screenings/') + `#/screenings/${id}`
+		window.location.href = generateUrl('/apps/screenings/') + `#/screenings/${id}${view}`
 	} catch (error) {
 		showError(errorMessage(error, t('screenings', 'Could not open the screening')))
 	}

@@ -1,11 +1,25 @@
 <template>
-	<div class="screening">
+	<div class="screening" :class="{ 'screening--wide': view !== 'settings' }">
 		<div v-if="!screening" class="screening__loading">
 			<NcLoadingIcon :size="44" />
 		</div>
 		<template v-else>
 			<header class="screening__header">
 				<h2>{{ screening.title }}</h2>
+				<nav class="screening__tabs" :aria-label="t('screenings', 'Screening sections')">
+					<a :href="screeningHash(screening.id, 'dashboard')"
+						class="screening__tab"
+						:class="{ 'screening__tab--active': view !== 'settings' }"
+						:aria-current="view !== 'settings' ? 'page' : undefined">
+						{{ t('screenings', 'Dashboard') }}
+					</a>
+					<a :href="screeningHash(screening.id, 'settings')"
+						class="screening__tab"
+						:class="{ 'screening__tab--active': view === 'settings' }"
+						:aria-current="view === 'settings' ? 'page' : undefined">
+						{{ t('screenings', 'Settings') }}
+					</a>
+				</nav>
 				<NcActions>
 					<NcActionButton @click="remove">
 						<template #icon>
@@ -16,6 +30,13 @@
 				</NcActions>
 			</header>
 
+			<DashboardView v-if="view === 'dashboard'" :screening="screening" />
+			<ViewerDetail v-else-if="view === 'viewer'"
+				:key="inviteId"
+				:screening="screening"
+				:invite-id="inviteId" />
+
+			<template v-else>
 			<form class="screening__form" @submit.prevent="save">
 				<section class="screening__section">
 					<h3>{{ t('screenings', 'General') }}</h3>
@@ -113,6 +134,7 @@
 				:invites="screening.invites"
 				:has-password="screening.hasPassword"
 				@count="(count) => emit('updated', { id: screening.id, inviteCount: count })" />
+			</template>
 		</template>
 	</div>
 </template>
@@ -137,11 +159,17 @@ import api, { errorMessage, publicLink } from '../api.js'
 import { copyLink } from '../clipboard.js'
 import HlsHelp from './HlsHelp.vue'
 import InvitesSection from './InvitesSection.vue'
+import { screeningHash } from '../router.js'
+import DashboardView from './DashboardView.vue'
 import MediaStatus from './MediaStatus.vue'
 import SubtitlesSection from './SubtitlesSection.vue'
+import ViewerDetail from './ViewerDetail.vue'
 
 const props = defineProps({
 	screeningId: { type: Number, required: true },
+	/** "dashboard", "settings" or "viewer" */
+	view: { type: String, default: 'dashboard' },
+	inviteId: { type: Number, default: null },
 })
 const emit = defineEmits(['updated', 'deleted'])
 
@@ -348,6 +376,35 @@ onMounted(load)
 	align-items: center;
 	gap: 8px;
 	min-height: 44px;
+}
+
+.screening--wide {
+	max-width: 1200px;
+}
+
+.screening__header {
+	flex-wrap: wrap;
+}
+
+.screening__tabs {
+	display: flex;
+	gap: 4px;
+}
+
+.screening__tab {
+	padding: 8px 14px;
+	border-radius: var(--border-radius-element, 8px);
+	color: var(--color-main-text);
+	font-weight: 500;
+}
+
+.screening__tab:hover {
+	background: var(--color-background-hover);
+}
+
+.screening__tab--active {
+	background: var(--color-primary-element-light);
+	color: var(--color-primary-element-light-text);
 }
 
 .screening__header h2 {

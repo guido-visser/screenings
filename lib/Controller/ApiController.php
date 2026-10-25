@@ -41,6 +41,16 @@ class ApiController extends Controller {
 		return $this->handle(fn () => $this->screenings->listForOwner($this->uid()));
 	}
 
+	/**
+	 * Used by the Files app to offer "Go to screening" instead of "Create screening".
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/screenings/by-source')]
+	public function screeningsBySource(): JSONResponse {
+		// A JSON object even when empty, keyed by file id.
+		return $this->handle(fn () => (object)$this->screenings->idsBySource($this->uid()));
+	}
+
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/api/screenings')]
 	public function createScreening(): JSONResponse {

@@ -45,6 +45,13 @@ class ScreeningService {
 	}
 
 	/**
+	 * @return array<int, int> source file id => newest screening id
+	 */
+	public function idsBySource(string $uid): array {
+		return $this->mapper->findIdsBySourceForOwner($uid);
+	}
+
+	/**
 	 * @throws NotFoundException
 	 */
 	public function get(int $id, string $uid): Screening {

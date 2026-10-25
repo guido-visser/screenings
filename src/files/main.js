@@ -1,4 +1,4 @@
-import { mdiMovieOpenPlusOutline } from '@mdi/js'
+import { mdiMovieOpenPlayOutline, mdiMovieOpenPlusOutline } from '@mdi/js'
 import { showError } from '@nextcloud/dialogs'
 import { FileType, Permission, registerFileAction } from '@nextcloud/files'
 import { t } from '@nextcloud/l10n'
@@ -7,6 +7,29 @@ import api, { errorMessage } from '../portal/api.js'
 
 // Nextcloud maps .m3u8 to audio/mpegurl; some servers use the Apple type.
 const PLAYLIST_MIMES = ['audio/mpegurl', 'application/vnd.apple.mpegurl']
+
+/**
+ * File id => newest screening id, used to pick the menu label. Menus are
+ * built synchronously, so this is a cache; actions re-check before acting.
+ */
+let screeningsBySource = {}
+
+async function refreshScreenings() {
+	try {
+		screeningsBySource = await api.screeningsBySource()
+	} catch {
+		// Keep the previous map; the actions re-check anyway.
+	}
+	return screeningsBySource
+}
+
+refreshScreenings()
+// Screenings may be created or deleted in another tab meanwhile.
+document.addEventListener('visibilitychange', () => {
+	if (document.visibilityState === 'visible') {
+		refreshScreenings()
+	}
+})
 
 /** The delivery mode for a node, or null when it can't become a screening. */
 function deliveryMode(node) {
@@ -32,36 +55,62 @@ function defaultTitle(node, mode) {
 	return name
 }
 
-registerFileAction({
-	id: 'screenings-create',
-	displayName: () => t('screenings', 'Create screening'),
-	iconSvgInline: () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="${mdiMovieOpenPlusOutline}"/></svg>`,
-	order: 50,
+function isCandidate({ nodes, view }) {
+	if (nodes.length !== 1 || view.id === 'trashbin') {
+		return false
+	}
+	const node = nodes[0]
+	return node.type === FileType.File
+		&& (node.permissions & Permission.READ) !== 0
+		&& deliveryMode(node) !== null
+}
 
-	enabled({ nodes, view }) {
-		if (nodes.length !== 1 || view.id === 'trashbin') {
-			return false
-		}
-		const node = nodes[0]
-		return node.type === FileType.File
-			&& (node.permissions & Permission.READ) !== 0
-			&& deliveryMode(node) !== null
-	},
+function hasScreening(node) {
+	return screeningsBySource[node.fileid] !== undefined
+}
 
-	async exec({ nodes }) {
-		const node = nodes[0]
-		const mode = deliveryMode(node)
-		try {
+function icon(path) {
+	return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="${path}"/></svg>`
+}
+
+/**
+ * Opens the file's screening, creating it first if there is none. Both menu
+ * entries use this, so a stale label never creates a duplicate or opens a
+ * deleted screening.
+ */
+async function openOrCreate(node) {
+	try {
+		let id = (await refreshScreenings())[node.fileid]
+		if (id === undefined) {
+			const mode = deliveryMode(node)
 			const screening = await api.createScreening({
 				title: defaultTitle(node, mode),
 				deliveryMode: mode,
 				sourcePath: node.path,
 			})
-			window.location.href = generateUrl('/apps/screenings/') + `#/screenings/${screening.id}`
-			return null
-		} catch (error) {
-			showError(errorMessage(error, t('screenings', 'Could not create the screening')))
-			return null
+			id = screening.id
 		}
-	},
+		window.location.href = generateUrl('/apps/screenings/') + `#/screenings/${id}`
+	} catch (error) {
+		showError(errorMessage(error, t('screenings', 'Could not open the screening')))
+	}
+	return null
+}
+
+registerFileAction({
+	id: 'screenings-create',
+	displayName: () => t('screenings', 'Create screening'),
+	iconSvgInline: () => icon(mdiMovieOpenPlusOutline),
+	order: 50,
+	enabled: (context) => isCandidate(context) && !hasScreening(context.nodes[0]),
+	exec: ({ nodes }) => openOrCreate(nodes[0]),
+})
+
+registerFileAction({
+	id: 'screenings-goto',
+	displayName: () => t('screenings', 'Go to screening'),
+	iconSvgInline: () => icon(mdiMovieOpenPlayOutline),
+	order: 50,
+	enabled: (context) => isCandidate(context) && hasScreening(context.nodes[0]),
+	exec: ({ nodes }) => openOrCreate(nodes[0]),
 })

@@ -41,6 +41,27 @@ class ScreeningMapper extends QBMapper {
 	}
 
 	/**
+	 * @return array<int, int> source file id => id of the newest screening using it
+	 */
+	public function findIdsBySourceForOwner(string $ownerUid): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('id', 'source_file_id')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('owner_uid', $qb->createNamedParameter($ownerUid)))
+			->andWhere($qb->expr()->isNotNull('source_file_id'))
+			->orderBy('created_at', 'ASC')
+			->addOrderBy('id', 'ASC');
+		$result = $qb->executeQuery();
+		$map = [];
+		while ($row = $result->fetch()) {
+			// Ascending order, so a newer screening overwrites an older one.
+			$map[(int)$row['source_file_id']] = (int)$row['id'];
+		}
+		$result->closeCursor();
+		return $map;
+	}
+
+	/**
 	 * @return Screening[]
 	 */
 	public function findAllForOwner(string $ownerUid): array {

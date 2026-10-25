@@ -13,6 +13,10 @@ export default {
 	async listScreenings() {
 		return (await axios.get(url('/screenings'))).data
 	},
+	/** @return {Promise<Object<string, number>>} file id => newest screening id */
+	async screeningsBySource() {
+		return (await axios.get(url('/screenings/by-source'))).data
+	},
 	async getScreening(id) {
 		return (await axios.get(url(`/screenings/${id}`))).data
 	},

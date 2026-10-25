@@ -1,0 +1,83 @@
+# Local development stack for the Screenings app.
+#   cd dev && cp .env.example .env && docker compose up -d
+# Nextcloud: http://localhost:8080   Mailpit (caught mail): http://localhost:8025
+name: screenings-dev
+
+services:
+  db:
+    image: mariadb:11.4
+    command: --transaction-isolation=READ-COMMITTED
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: nextcloud
+      MARIADB_USER: nextcloud
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db:/var/lib/mysql
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  nextcloud:
+    build:
+      context: .
+      dockerfile: nextcloud.Dockerfile
+    restart: unless-stopped
+    depends_on: [db, redis]
+    ports:
+      - "8080:80"
+    environment:
+      MYSQL_HOST: db
+      MYSQL_DATABASE: nextcloud
+      MYSQL_USER: nextcloud
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      NEXTCLOUD_ADMIN_USER: ${NC_ADMIN_USER}
+      NEXTCLOUD_ADMIN_PASSWORD: ${NC_ADMIN_PASSWORD}
+      NEXTCLOUD_TRUSTED_DOMAINS: localhost
+    volumes:
+      - nextcloud:/var/www/html
+      - ..:/var/www/html/custom_apps/screenings
+      - ./hooks/post-installation:/docker-entrypoint-hooks.d/post-installation:ro
+
+  # Runs Nextcloud background jobs every 5 minutes, like a system cron would.
+  cron:
+    build:
+      context: .
+      dockerfile: nextcloud.Dockerfile
+    restart: unless-stopped
+    depends_on: [nextcloud]
+    entrypoint: /cron.sh
+    volumes:
+      - nextcloud:/var/www/html
+      - ..:/var/www/html/custom_apps/screenings
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+
+  # Rebuilds js/ on every change in src/.
+  frontend:
+    image: node:24-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run watch"
+    volumes:
+      - ..:/app
+      - node_modules:/app/node_modules
+
+  # One-off PHP tooling: docker compose run --rm composer install
+  composer:
+    image: composer:2
+    profiles: [tools]
+    working_dir: /app
+    volumes:
+      - ..:/app
+
+volumes:
+  db:
+  nextcloud:
+  node_modules:

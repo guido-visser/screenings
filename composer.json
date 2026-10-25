@@ -1,0 +1,32 @@
+{
+	"name": "screenings/screenings",
+	"description": "Private, tracked film screenings for Nextcloud",
+	"type": "project",
+	"license": "AGPL-3.0-or-later",
+	"autoload": {
+		"psr-4": {
+			"OCA\\Screenings\\": "lib/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"OCA\\Screenings\\Tests\\": "tests/"
+		}
+	},
+	"require": {
+		"php": "^8.3"
+	},
+	"require-dev": {
+		"nextcloud/ocp": "v35.0.2",
+		"phpunit/phpunit": "^11.5"
+	},
+	"config": {
+		"platform": {
+			"php": "8.3"
+		},
+		"sort-packages": true
+	},
+	"scripts": {
+		"test": "phpunit -c tests/phpunit.xml"
+	}
+}

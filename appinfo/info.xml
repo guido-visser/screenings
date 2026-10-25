@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<info xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
+	<id>screenings</id>
+	<name>Screenings</name>
+	<summary>Share private, tracked film screenings</summary>
+	<description><![CDATA[Send confidential screening links for a film and see exactly how each viewer watched it: opens, playback progress, pauses, seeks, subtitles and more.]]></description>
+	<version>0.1.0</version>
+	<licence>agpl</licence>
+	<author mail="guido.vsr@gmail.com">Guido</author>
+	<namespace>Screenings</namespace>
+	<category>multimedia</category>
+	<bugs>https://example.invalid/screenings/issues</bugs>
+	<dependencies>
+		<php min-version="8.3"/>
+		<nextcloud min-version="35" max-version="35"/>
+	</dependencies>
+	<navigations>
+		<navigation>
+			<name>Screenings</name>
+			<route>screenings.page.index</route>
+			<icon>app.svg</icon>
+		</navigation>
+	</navigations>
+</info>

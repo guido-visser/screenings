@@ -1,0 +1,47 @@
+# Screenings
+
+A Nextcloud app (NC 35) for sharing private film screenings with per-viewer tracking: opens, playback progress, pauses, seeks, subtitle choice, and when viewers leave.
+
+## Layout
+
+| Path | What |
+|---|---|
+| `appinfo/info.xml` | App metadata |
+| `lib/` | PHP backend (`OCA\Screenings`); routes are declared with `#[FrontpageRoute]` attributes on controllers |
+| `templates/` | `portal.php` (owner UI shell), `viewer.php` (public screening page shell) |
+| `src/portal/` | Vue 3 + `@nextcloud/vue` portal, built to `js/screenings-portal.mjs` |
+| `src/viewer/` | Public viewer page, built to `js/screenings-viewer.mjs` |
+| `dev/` | Docker development stack |
+
+## Development
+
+The only thing you need installed is **Docker Desktop**. Node, Composer, PHP and ffmpeg all run in containers.
+
+```bash
+cd dev
+cp .env.example .env
+docker compose up -d --build
+```
+
+- Nextcloud: http://localhost:8080 (log in with the admin credentials from `dev/.env`)
+- Mailpit, which catches every email the app sends: http://localhost:8025
+- The `frontend` container watches `src/` and rebuilds `js/` on every change. Reload the browser to see changes.
+- The first start takes a few minutes while Nextcloud installs. Follow progress with `docker compose logs -f nextcloud`.
+
+Useful commands (run from `dev/`):
+
+```bash
+docker compose exec -u www-data nextcloud php occ app:list | grep screenings
+docker compose exec -u www-data nextcloud php occ log:tail
+docker compose run --rm composer install
+```
+
+To test a server **without ffmpeg**:
+
+```bash
+docker compose build --build-arg SCREENINGS_NO_FFMPEG=1 nextcloud cron && docker compose up -d
+```
+
+Pages:
+- Portal: http://localhost:8080/index.php/apps/screenings/
+- Viewer (stub): http://localhost:8080/index.php/apps/screenings/s/abcdefghijklmnop0123

@@ -1,0 +1,16 @@
+body {
+	background: #0b0b0c;
+	color: #e8e8e8;
+}
+
+#screenings-viewer {
+	min-height: 100vh;
+	display: grid;
+	place-items: center;
+	padding: 16px;
+}
+
+.screenings-viewer__placeholder {
+	font-size: 16px;
+	opacity: 0.8;
+}

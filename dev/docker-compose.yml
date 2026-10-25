@@ -65,6 +65,10 @@ services:
     image: node:24-alpine
     working_dir: /app
     command: sh -c "npm install && npm run watch"
+    environment:
+      # File events from a Windows/macOS host don't reach the container; poll instead.
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "500"
     volumes:
       - ..:/app
       - node_modules:/app/node_modules

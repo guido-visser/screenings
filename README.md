@@ -25,7 +25,8 @@ docker compose up -d --build
 
 - Nextcloud: http://localhost:8080 (log in with the admin credentials from `dev/.env`)
 - Mailpit, which catches every email the app sends: http://localhost:8025
-- The `frontend` container watches `src/` and rebuilds `js/` on every change. Reload the browser to see changes.
+- The `frontend` container watches `src/` and rebuilds `js/` on every change (it polls, because file events from a Windows or macOS host don't reach the container). Do a hard refresh (Ctrl+Shift+R) to see changes; the browser caches the app's scripts.
+- PHP edits take effect on the next request.
 - The first start takes a few minutes while Nextcloud installs. Follow progress with `docker compose logs -f nextcloud`.
 
 Useful commands (run from `dev/`):

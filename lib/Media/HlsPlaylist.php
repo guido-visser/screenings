@@ -42,10 +42,12 @@ class HlsPlaylist {
 	}
 
 	/**
+	 * @param bool $ownOutput true when reading the app's own (encrypted) output
+	 *                        rather than an upload, which must be unencrypted
 	 * @return array{mediaSequence: int, targetDuration: int, segments: list<array{duration: float, uri: string}>}
 	 * @throws MediaException
 	 */
-	public static function parseMedia(string $text): array {
+	public static function parseMedia(string $text, bool $ownOutput = false): array {
 		$lines = self::lines($text);
 		if (($lines[0] ?? '') !== '#EXTM3U') {
 			throw new MediaException('This is not an HLS playlist (it does not start with #EXTM3U)');
@@ -58,7 +60,7 @@ class HlsPlaylist {
 		$ended = false;
 
 		foreach ($lines as $line) {
-			if (str_starts_with($line, '#EXT-X-KEY:') && !str_contains($line, 'METHOD=NONE')) {
+			if (!$ownOutput && str_starts_with($line, '#EXT-X-KEY:') && !str_contains($line, 'METHOD=NONE')) {
 				throw new MediaException('This HLS is already encrypted. Upload an unencrypted export; the app encrypts it.');
 			}
 			if (str_starts_with($line, '#EXT-X-MAP:')) {

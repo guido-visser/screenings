@@ -18,6 +18,7 @@
 		"@nextcloud/l10n": "^3.4.1",
 		"@nextcloud/router": "^3.2.0",
 		"@nextcloud/vue": "^9.14.0",
+		"hls.js": "^1.7.3",
 		"vue": "^3.5.44"
 	},
 	"devDependencies": {

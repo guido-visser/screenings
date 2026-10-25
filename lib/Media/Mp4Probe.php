@@ -26,6 +26,8 @@ class Mp4Probe {
 		$offset = 0;
 		$moov = null;
 		$moovBeforeMdat = null;
+		$moovOffset = 0;
+		$moovSize = 0;
 		$first = true;
 
 		while ($offset + 8 <= $fileSize) {
@@ -47,8 +49,8 @@ class Mp4Probe {
 					throw new MediaException('The MP4 index is unexpectedly large');
 				}
 				$moov = $this->readAt($stream, $offset + $headerSize, $bodySize);
-				// Without moov there is nothing else to learn; with it we're done
-				// unless we still need to know whether mdat came first.
+				$moovOffset = $offset;
+				$moovSize = $boxSize;
 				break;
 			}
 			$offset += $boxSize;
@@ -58,10 +60,10 @@ class Mp4Probe {
 			throw new MediaException('This MP4 has no index (moov box); it may be incomplete or still uploading');
 		}
 
-		return $this->parseMoov($moov, $moovBeforeMdat ?? true);
+		return $this->parseMoov($moov, $moovBeforeMdat ?? true, $moovOffset, $moovSize);
 	}
 
-	private function parseMoov(string $moov, bool $faststart): Mp4Info {
+	private function parseMoov(string $moov, bool $faststart, int $moovOffset, int $moovSize): Mp4Info {
 		$durationMs = null;
 		$videoCodec = null;
 		$audioCodec = null;
@@ -79,7 +81,7 @@ class Mp4Probe {
 			}
 		}
 
-		return new Mp4Info($durationMs, $faststart, $videoCodec, $audioCodec);
+		return new Mp4Info($durationMs, $faststart, $videoCodec, $audioCodec, $moovOffset, $moovSize);
 	}
 
 	/**

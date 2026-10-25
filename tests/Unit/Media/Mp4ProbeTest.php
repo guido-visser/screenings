@@ -58,6 +58,9 @@ class Mp4ProbeTest extends TestCase {
 
 		$this->assertFalse($info->faststart);
 		$this->assertStringContainsString('fast start', Mp4Probe::warnings($info)[0]);
+		// The index sits right after ftyp (12 bytes) and mdat (108 bytes).
+		$this->assertSame(120, $info->moovOffset);
+		$this->assertSame($size - 120, $info->moovSize);
 	}
 
 	public function testWarnsAboutHevc(): void {

@@ -46,6 +46,19 @@ docker compose exec -u www-data nextcloud php occ screenings:process-media <scre
 ```
 
 Add `--force` to process media that is already ready or failed.
+
+## How playback is protected
+
+Every media request (`/apps/screenings/stream/<session>/…`) must have:
+
+1. **The viewer session cookie**: HttpOnly and SameSite=Strict, set when the screening page opens. A new page load ends the invite's previous session, so one invite plays in one place at a time.
+2. **A live page**: the player sends a heartbeat every 5 s. Without one for 30 s, media is refused.
+3. **A playback token** (HLS) sent as the `X-Screening-Token` header. It lasts 60 s, is renewed by each heartbeat, and is bound to the session, IP address and User-Agent. Direct MP4 and subtitle URLs carry a signature bound to the session and User-Agent instead.
+4. **The playhead window**: nothing more than 90 s past the position the player last reported. On top of that, a speed budget of 3 minutes plus 3× real time per session (needs Redis).
+
+Revoking an invite or reaching the expiry date stops playback within one heartbeat (about 5 s). HLS segments are AES-128 encrypted, and the key is served under the same rules.
+
+**What this does and doesn't stop.** Copying a playlist or video URL from devtools into ffmpeg or a download tool fails (403). So does copying the cookie and token to another machine. A script on the viewer's own machine that copies the session and fakes heartbeats can still pull the film, at about 3× real time at most. Screen recording can't be prevented without DRM. The optional watermark makes leaks traceable to a person.
 - The first start takes a few minutes while Nextcloud installs. Follow progress with `docker compose logs -f nextcloud`.
 
 Useful commands (run from `dev/`):

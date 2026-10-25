@@ -55,6 +55,15 @@ class SessionService {
 	 * The open session the request's cookie points at, if any.
 	 */
 	public function fromRequest(Invite $invite, IRequest $request): ?ViewerSession {
+		$session = $this->fromRequestIncludingEnded($invite, $request);
+		return $session !== null && $session->getEndedAt() === null ? $session : null;
+	}
+
+	/**
+	 * Like fromRequest(), but also returns a closed session, so callers can
+	 * tell "replaced by a newer session" from "no valid cookie".
+	 */
+	public function fromRequestIncludingEnded(Invite $invite, IRequest $request): ?ViewerSession {
 		$value = $request->getCookie(self::cookieName($invite));
 		if (!is_string($value) || !preg_match('/^(\d+)\.([A-Za-z0-9]{40})$/', $value, $m)) {
 			return null;
@@ -64,9 +73,7 @@ class SessionService {
 		} catch (DoesNotExistException) {
 			return null;
 		}
-		if ($session->getInviteId() !== $invite->getId()
-			|| $session->getEndedAt() !== null
-			|| !hash_equals($session->getSecretHash(), hash('sha256', $m[2]))) {
+		if ($session->getInviteId() !== $invite->getId() || !hash_equals($session->getSecretHash(), hash('sha256', $m[2]))) {
 			return null;
 		}
 		return $session;

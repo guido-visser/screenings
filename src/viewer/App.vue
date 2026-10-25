@@ -19,9 +19,7 @@
 
 		<section v-else-if="state === 'ready'" class="viewer__screening">
 			<ScreeningHeader :screening="screening" :viewer="viewer" wide />
-			<div class="viewer__player">
-				<p>{{ t('screenings', 'The player arrives in the next version of this app.') }}</p>
-			</div>
+			<Player :playback="playback" :screening="screening" :viewer="viewer" />
 			<PrivacyNotice :owner="screening.owner" />
 		</section>
 	</main>
@@ -30,13 +28,16 @@
 <script setup>
 import { loadState } from '@nextcloud/initial-state'
 import { t } from '@nextcloud/l10n'
-import { computed } from 'vue'
+import { computed, defineAsyncComponent } from 'vue'
 import EmailGate from './components/EmailGate.vue'
 import PasswordForm from './components/PasswordForm.vue'
 import PrivacyNotice from './components/PrivacyNotice.vue'
 import ScreeningHeader from './components/ScreeningHeader.vue'
 
-const { state, token, screening, viewer } = loadState('screenings', 'viewer')
+// hls.js is large; only load it once there is something to play.
+const Player = defineAsyncComponent(() => import('./components/Player.vue'))
+
+const { state, token, screening, viewer, playback } = loadState('screenings', 'viewer')
 
 if (screening?.title) {
 	document.title = screening.title

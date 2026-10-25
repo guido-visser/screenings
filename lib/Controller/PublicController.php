@@ -13,7 +13,10 @@ use OCA\Screenings\Service\EventLogger;
 use OCA\Screenings\Service\MailService;
 use OCA\Screenings\Service\OtpService;
 use OCA\Screenings\Service\SessionService;
+use OCA\Screenings\Stream\StreamContext;
+use OCA\Screenings\Stream\StreamService;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\ContentSecurityPolicy;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\AnonRateLimit;
 use OCP\AppFramework\Http\Attribute\BruteForceProtection;
@@ -51,6 +54,7 @@ class PublicController extends Controller {
 		private OtpService $otp,
 		private MailService $mail,
 		private EventLogger $events,
+		private StreamService $stream,
 		private IInitialState $initialState,
 		private IUserManager $userManager,
 		private IL10N $l,
@@ -94,7 +98,15 @@ class PublicController extends Controller {
 
 		$session = $this->sessions->start($invite, $this->request, $response);
 		$this->events->log($screening->getId(), $invite->getId(), $session->getId(), EventLogger::SESSION_START);
-		return $this->render($response, $token, 'ready', $screening, $invite);
+
+		// hls.js feeds media through blob: URLs and may decode in a blob: worker.
+		$policy = new ContentSecurityPolicy();
+		$policy->addAllowedMediaDomain('blob:');
+		$policy->addAllowedWorkerSrcDomain('blob:');
+		$response->setContentSecurityPolicy($policy);
+
+		$playback = $this->stream->playerConfig(new StreamContext($session, $invite, $screening), $this->request);
+		return $this->render($response, $token, 'ready', $screening, $invite, $playback);
 	}
 
 	#[PublicPage]
@@ -171,10 +183,11 @@ class PublicController extends Controller {
 		return $resolved['screening'];
 	}
 
-	private function render(TemplateResponse $response, string $token, string $state, ?Screening $screening = null, ?Invite $invite = null): TemplateResponse {
+	private function render(TemplateResponse $response, string $token, string $state, ?Screening $screening = null, ?Invite $invite = null, ?array $playback = null): TemplateResponse {
 		$this->initialState->provideInitialState('viewer', [
 			'state' => $state,
 			'token' => $token,
+			'playback' => $playback,
 			'screening' => $screening === null ? null : [
 				'title' => $screening->getTitle(),
 				'description' => $screening->getDescription(),

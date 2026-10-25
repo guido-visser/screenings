@@ -24,11 +24,23 @@ body {
 	line-height: 1.5;
 }
 
-/* Nextcloud's public layout reserves room for a header we don't show. */
-#content.app-public {
+/* Nextcloud's public layout is a fixed, clipped app frame with room for a
+   header we don't show. This page is a normal scrolling document instead. */
+html,
+body#body-public {
+	position: static;
+	height: auto;
+	min-height: 100%;
+	overflow: visible;
+}
+
+body#body-public #content.app-public {
+	position: static;
+	height: auto;
+	min-height: 100vh;
 	margin: 0;
 	padding: 0;
-	min-height: 100vh;
+	overflow: visible;
 }
 
 #screenings-viewer {
@@ -78,19 +90,300 @@ body {
 	align-self: flex-start;
 }
 
-.viewer__player {
-	display: flex;
-	align-items: center;
-	justify-content: center;
+/* --- Player ---------------------------------------------------------------- */
+
+.player {
+	position: relative;
 	aspect-ratio: 16 / 9;
 	margin: 24px 0 16px;
 	background: #000;
-	border: 1px solid var(--scr-border);
 	border-radius: 8px;
-	color: var(--scr-muted);
+	overflow: hidden;
+	outline: none;
+	user-select: none;
+	-webkit-user-select: none;
+	-webkit-touch-callout: none;
+}
+
+.player:focus-visible {
+	box-shadow: 0 0 0 2px var(--scr-accent);
+}
+
+.player--fullscreen {
+	aspect-ratio: auto;
+	width: 100vw;
+	height: 100vh;
+	margin: 0;
+	border-radius: 0;
+}
+
+.player--idle {
+	cursor: none;
+}
+
+.player__video {
+	display: block;
+	width: 100%;
+	height: 100%;
+	background: #000;
+}
+
+/* Subtitles sit above the control bar. */
+.player__video::cue {
+	font-size: 1.1em;
+	background: rgba(0, 0, 0, 0.6);
+}
+
+.player__watermark {
+	position: absolute;
+	z-index: 2;
+	max-width: 40%;
+	color: #fff;
+	opacity: 0.16;
+	font-size: clamp(10px, 1.4vw, 18px);
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+	pointer-events: none;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	transition: left 14s linear, top 14s linear;
+}
+
+.player__big-play {
+	position: absolute;
+	z-index: 3;
+	top: 50%;
+	left: 50%;
+	width: 84px;
+	height: 84px;
+	transform: translate(-50%, -50%);
+	padding: 18px;
+	color: var(--scr-accent-text);
+	background: var(--scr-accent);
+	border: 0;
+	border-radius: 50%;
+	cursor: pointer;
+}
+
+.player__big-play svg,
+.player__button svg,
+.player__select svg {
+	display: block;
+	width: 100%;
+	height: 100%;
+	fill: currentColor;
+}
+
+.player__spinner {
+	position: absolute;
+	z-index: 3;
+	top: 50%;
+	left: 50%;
+	width: 44px;
+	height: 44px;
+	margin: -22px 0 0 -22px;
+	border: 3px solid rgba(255, 255, 255, 0.25);
+	border-top-color: #fff;
+	border-radius: 50%;
+	animation: player-spin 0.9s linear infinite;
+	pointer-events: none;
+}
+
+@keyframes player-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+.player__stopped {
+	position: absolute;
+	z-index: 4;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 16px;
+	padding: 24px;
 	text-align: center;
-	padding: 16px;
-	box-sizing: border-box;
+	background: rgba(0, 0, 0, 0.85);
+}
+
+.player__stopped p {
+	max-width: 46ch;
+	margin: 0;
+}
+
+.player__reload {
+	padding: 10px 20px;
+	font: inherit;
+	font-weight: 600;
+	color: var(--scr-accent-text);
+	background: var(--scr-accent);
+	border: 0;
+	border-radius: 8px;
+	cursor: pointer;
+}
+
+.player__controls {
+	position: absolute;
+	z-index: 3;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	padding: 24px 12px 8px;
+	background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+	transition: opacity 0.3s;
+}
+
+.player--idle .player__controls {
+	opacity: 0;
+}
+
+.player__seek {
+	position: relative;
+	height: 16px;
+	display: flex;
+	align-items: center;
+}
+
+.player__buffered {
+	position: absolute;
+	left: 0;
+	height: 4px;
+	background: rgba(255, 255, 255, 0.35);
+	border-radius: 2px;
+	pointer-events: none;
+}
+
+.player input[type="range"] {
+	-webkit-appearance: none;
+	appearance: none;
+	margin: 0;
+	padding: 0;
+	min-height: 0;
+	height: 16px;
+	background: transparent;
+	border: 0;
+	cursor: pointer;
+}
+
+.player__seek input[type="range"] {
+	position: relative;
+	width: 100%;
+}
+
+.player input[type="range"]::-webkit-slider-runnable-track {
+	height: 4px;
+	border-radius: 2px;
+	background: linear-gradient(to right, var(--scr-accent) var(--progress, 0%), rgba(255, 255, 255, 0.2) var(--progress, 0%));
+}
+
+.player input[type="range"]::-moz-range-track {
+	height: 4px;
+	border-radius: 2px;
+	background: linear-gradient(to right, var(--scr-accent) var(--progress, 0%), rgba(255, 255, 255, 0.2) var(--progress, 0%));
+}
+
+.player input[type="range"]::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	width: 14px;
+	height: 14px;
+	margin-top: -5px;
+	border-radius: 50%;
+	background: #fff;
+}
+
+.player input[type="range"]::-moz-range-thumb {
+	width: 14px;
+	height: 14px;
+	border: 0;
+	border-radius: 50%;
+	background: #fff;
+}
+
+.player__volume {
+	--progress: 100%;
+	width: 80px;
+}
+
+.player__bar {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	margin-top: 4px;
+}
+
+.player__button {
+	width: 40px;
+	height: 40px;
+	padding: 8px;
+	flex-shrink: 0;
+	color: #fff;
+	background: none;
+	border: 0;
+	border-radius: 6px;
+	cursor: pointer;
+}
+
+.player__button:hover,
+.player__select:hover {
+	background: rgba(255, 255, 255, 0.12);
+}
+
+.player__time {
+	margin-left: 8px;
+	font-size: 0.85em;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.player__spacer {
+	flex: 1;
+}
+
+.player__select {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	height: 40px;
+	padding: 0 4px 0 8px;
+	border-radius: 6px;
+}
+
+.player__select svg {
+	width: 22px;
+	height: 22px;
+}
+
+.player__select select {
+	max-width: 120px;
+	padding: 4px;
+	min-height: 0;
+	margin: 0;
+	font: inherit;
+	font-size: 0.85em;
+	color: #fff;
+	background: transparent;
+	border: 0;
+	cursor: pointer;
+}
+
+.player__select option {
+	color: #000;
+}
+
+@media (max-width: 600px) {
+	.player__volume,
+	.player__button[aria-label*="10"] {
+		display: none;
+	}
+
+	.player__select select {
+		max-width: 72px;
+	}
 }
 
 .screening-header__kicker {

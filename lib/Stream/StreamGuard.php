@@ -103,6 +103,28 @@ class StreamGuard {
 		return new StreamContext($session, $invite, $screening);
 	}
 
+	/**
+	 * For tracking events: the browser holds a valid cookie for this invite.
+	 * Unlike media requests this also accepts ended, replaced, revoked or
+	 * expired sessions, so their last events ("page_leave", "playback_stopped")
+	 * are still recorded.
+	 *
+	 * @throws StreamDenied
+	 */
+	public function authorizeTracking(int $sessionId, IRequest $request): StreamContext {
+		try {
+			$session = $this->sessions->find($sessionId);
+			$invite = $this->invites->find($session->getInviteId());
+			$screening = $this->screenings->findById($invite->getScreeningId());
+		} catch (DoesNotExistException) {
+			throw new StreamDenied(StreamDenied::NOT_FOUND, 404);
+		}
+		if ($this->sessionService->fromRequestIncludingEnded($invite, $request) === null) {
+			throw new StreamDenied(StreamDenied::TOKEN);
+		}
+		return new StreamContext($session, $invite, $screening);
+	}
+
 	public function playbackToken(int $sessionId, IRequest $request): array {
 		$expiresAt = $this->time->getTime() + PlaybackToken::TTL;
 		return [

@@ -8,6 +8,8 @@ use OCA\Screenings\AppInfo\Application;
 use OCA\Screenings\Exception\ValidationException;
 use OCA\Screenings\Media\Ffmpeg;
 use OCA\Screenings\Media\Transcoder;
+use OCA\Screenings\Tracking\GeoIpService;
+use OCA\Screenings\Tracking\GeoIpUpdater;
 use OCP\IAppConfig;
 
 class AdminSettingsService {
@@ -15,6 +17,8 @@ class AdminSettingsService {
 		private IAppConfig $appConfig,
 		private DeliveryModes $modes,
 		private Ffmpeg $ffmpeg,
+		private GeoIpService $geoIp,
+		private GeoIpUpdater $geoIpUpdater,
 	) {
 	}
 
@@ -25,6 +29,14 @@ class AdminSettingsService {
 			'ffmpegPath' => $this->appConfig->getValueString(Application::APP_ID, Ffmpeg::CONFIG_FFMPEG_PATH, ''),
 			'ffprobePath' => $this->appConfig->getValueString(Application::APP_ID, Ffmpeg::CONFIG_FFPROBE_PATH, ''),
 			'detected' => $this->ffmpeg->detect(),
+			'geoip' => [
+				'mode' => $this->geoIp->mode(),
+				'path' => $this->appConfig->getValueString(Application::APP_ID, GeoIpService::CONFIG_PATH, ''),
+				'accountId' => $this->appConfig->getValueString(Application::APP_ID, GeoIpService::CONFIG_ACCOUNT, ''),
+				// The key itself never goes back to the browser.
+				'hasLicenseKey' => $this->appConfig->getValueString(Application::APP_ID, GeoIpService::CONFIG_LICENSE, '') !== '',
+				'status' => $this->geoIp->status(),
+			],
 		];
 	}
 
@@ -59,6 +71,52 @@ class AdminSettingsService {
 			$this->appConfig->setValueBool(Application::APP_ID, DeliveryModes::CONFIG_TRANSCODE_ENABLED, $enabled);
 		}
 
+		if (isset($data['geoip']) && is_array($data['geoip'])) {
+			$this->updateGeoIp($data['geoip']);
+		}
+
 		return $this->get();
+	}
+
+	/**
+	 * @throws ValidationException
+	 */
+	public function downloadGeoIp(): array {
+		$this->geoIpUpdater->update();
+		return $this->get();
+	}
+
+	/**
+	 * @throws ValidationException
+	 */
+	private function updateGeoIp(array $geo): void {
+		if (array_key_exists('path', $geo)) {
+			$path = trim((string)$geo['path']);
+			if ($path !== '' && (!str_starts_with($path, '/') || !str_ends_with($path, '.mmdb') || !is_readable($path))) {
+				throw new ValidationException('Enter the absolute path of a readable .mmdb file', 'geoipPath');
+			}
+			$this->appConfig->setValueString(Application::APP_ID, GeoIpService::CONFIG_PATH, $path);
+		}
+		if (array_key_exists('accountId', $geo)) {
+			$account = trim((string)$geo['accountId']);
+			if ($account !== '' && !ctype_digit($account)) {
+				throw new ValidationException('The MaxMind account ID is a number', 'geoipAccount');
+			}
+			$this->appConfig->setValueString(Application::APP_ID, GeoIpService::CONFIG_ACCOUNT, $account);
+		}
+		// Only replaced when a new key is typed; an empty field keeps the old one.
+		if (isset($geo['licenseKey']) && trim((string)$geo['licenseKey']) !== '') {
+			$this->appConfig->setValueString(Application::APP_ID, GeoIpService::CONFIG_LICENSE, trim((string)$geo['licenseKey']), false, true);
+		}
+		if (array_key_exists('mode', $geo)) {
+			$mode = (string)$geo['mode'];
+			if (!in_array($mode, [GeoIpService::MODE_OFF, GeoIpService::MODE_MAXMIND, GeoIpService::MODE_FILE], true)) {
+				throw new ValidationException('Unknown location mode', 'geoipMode');
+			}
+			if ($mode === GeoIpService::MODE_FILE && $this->appConfig->getValueString(Application::APP_ID, GeoIpService::CONFIG_PATH, '') === '') {
+				throw new ValidationException('Enter the path of the database file first', 'geoipPath');
+			}
+			$this->appConfig->setValueString(Application::APP_ID, GeoIpService::CONFIG_MODE, $mode);
+		}
 	}
 }

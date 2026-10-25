@@ -17,17 +17,19 @@
 			controlslist="nodownload noremoteplayback noplaybackrate"
 			@click="togglePlay"
 			@dblclick="toggleFullscreen"
-			@play="playing = true"
-			@pause="playing = false"
-			@ended="playing = false"
+			@loadedmetadata="onLoadedMetadata"
+			@play="onPlay"
+			@pause="onPause"
+			@ended="onEnded"
 			@timeupdate="onTimeUpdate"
 			@progress="onProgress"
 			@durationchange="onDurationChange"
 			@volumechange="onVolumeChange"
 			@seeking="onSeeking"
-			@waiting="buffering = true"
-			@playing="buffering = false"
-			@canplay="buffering = false">
+			@seeked="onSeeked"
+			@waiting="onWaiting"
+			@playing="onBufferingEnd"
+			@canplay="onBufferingEnd">
 			<track v-for="subtitle in playback.subtitles"
 				:key="subtitle.id"
 				kind="subtitles"
@@ -133,7 +135,7 @@ import {
 import { t } from '@nextcloud/l10n'
 import Hls from 'hls.js'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { formatTime, Heartbeat } from '../playback.js'
+import { formatTime, Heartbeat, RangeRecorder, Tracker } from '../playback.js'
 
 const props = defineProps({
 	playback: { type: Object, required: true },
@@ -162,8 +164,17 @@ const stopReason = ref(null)
 
 let hls = null
 let heartbeat = null
+let tracker = null
 let idleTimer = null
 let watermarkTimer = null
+let volumeTimer = null
+const ranges = new RangeRecorder()
+// Playhead before a seek started, for the "seeked" event.
+let seekFrom = null
+let bufferingSince = null
+let ready = false
+
+const position = () => video.value?.currentTime ?? 0
 
 const progressPercent = computed(() => duration.value ? (currentTime.value / duration.value) * 100 : 0)
 const bufferedPercent = computed(() => duration.value ? Math.min(100, (bufferedEnd.value / duration.value) * 100) : 0)
@@ -214,6 +225,7 @@ function playerState() {
 		playing: v ? !v.paused && !v.ended : false,
 		subtitle: subtitle.value || null,
 		quality: props.playback.mode === 'hls' ? (level?.label ?? 'auto') : 'source',
+		ranges: ranges.take(),
 	}
 }
 
@@ -221,6 +233,9 @@ function stop(reason) {
 	if (stopReason.value) {
 		return
 	}
+	ranges.close()
+	tracker?.track('playback_stopped', position(), { reason })
+	tracker?.flush()
 	stopReason.value = reason
 	heartbeat?.stop()
 	hls?.destroy()
@@ -256,12 +271,18 @@ function setupHls() {
 			.sort((a, b) => b.height - a.height)
 	})
 	hls.on(Hls.Events.LEVEL_SWITCHED, (_, data) => {
+		const from = levelLabel(currentLevel.value)
 		currentLevel.value = data.level
+		// Automatic switches; manual ones are tracked in setQuality().
+		if (quality.value === 'auto' && from !== null) {
+			tracker.track('quality_change', position(), { from, to: levelLabel(data.level), auto: true })
+		}
 	})
 	hls.on(Hls.Events.ERROR, async (_, data) => {
 		if (!data.fatal) {
 			return
 		}
+		tracker.track('error', position(), { reason: String(data.details ?? data.type) })
 		// Ask the server why (revoked, replaced, …); otherwise a generic stop.
 		await heartbeat.beat()
 		stop(stopReason.value ?? 'error')
@@ -277,12 +298,22 @@ function applySubtitle() {
 }
 
 function setSubtitle(lang) {
+	tracker.track('subtitle_change', position(), { from: subtitle.value || null, to: lang || null })
 	subtitle.value = lang
 	applySubtitle()
 	heartbeat.beat()
 }
 
+function levelLabel(index) {
+	return qualities.value.find((q) => q.index === index)?.label ?? null
+}
+
 function setQuality(value) {
+	tracker.track('quality_change', position(), {
+		from: quality.value === 'auto' ? 'auto' : levelLabel(Number(quality.value)),
+		to: value === 'auto' ? 'auto' : levelLabel(Number(value)),
+		auto: false,
+	})
 	quality.value = value
 	if (hls) {
 		hls.currentLevel = value === 'auto' ? -1 : Number(value)
@@ -315,9 +346,64 @@ function seekBy(delta) {
 }
 
 function onSeeking() {
+	if (seekFrom === null) {
+		seekFrom = ranges.last ?? currentTime.value
+	}
+	ranges.close()
 	currentTime.value = video.value.currentTime
 	// Report the target straight away so the server lets the player fetch there.
 	heartbeat.beat()
+}
+
+function onSeeked() {
+	const to = position()
+	tracker.track('seeked', to, { from: Math.round((seekFrom ?? 0) * 10) / 10, to: Math.round(to * 10) / 10 })
+	seekFrom = null
+}
+
+function onLoadedMetadata() {
+	if (!ready) {
+		ready = true
+		tracker.track('player_ready', 0, { screen: [window.screen.width, window.screen.height], mode: props.playback.mode })
+	}
+}
+
+function onPlay() {
+	playing.value = true
+	tracker.track('play', position())
+}
+
+function onPause() {
+	playing.value = false
+	ranges.close()
+	// "ended" also pauses; that is tracked separately.
+	if (!video.value.ended) {
+		tracker.track('pause', position())
+	}
+}
+
+function onEnded() {
+	playing.value = false
+	ranges.close()
+	tracker.track('ended', position())
+}
+
+function onWaiting() {
+	buffering.value = true
+	ranges.close()
+	// Buffering right after a seek or before the first play isn't a stall.
+	if (started.value && seekFrom === null && bufferingSince === null) {
+		bufferingSince = Date.now()
+		tracker.track('buffering_start', position())
+	}
+}
+
+function onBufferingEnd() {
+	buffering.value = false
+	if (bufferingSince !== null) {
+		tracker.track('buffering_end', position(), { seconds: Math.round((Date.now() - bufferingSince) / 100) / 10 })
+		bufferingSince = null
+	}
 }
 
 function toggleMute() {
@@ -333,7 +419,11 @@ function setVolume(value) {
 }
 
 function onTimeUpdate() {
-	currentTime.value = video.value.currentTime
+	const v = video.value
+	currentTime.value = v.currentTime
+	if (!v.paused && !v.seeking && !buffering.value) {
+		ranges.update(v.currentTime)
+	}
 }
 
 function onProgress() {
@@ -355,6 +445,11 @@ function onDurationChange() {
 function onVolumeChange() {
 	volume.value = video.value.volume
 	muted.value = video.value.muted
+	// Dragging the slider fires many events; record where it settles.
+	window.clearTimeout(volumeTimer)
+	volumeTimer = window.setTimeout(() => {
+		tracker.track('volume_change', position(), { volume: Math.round(volume.value * 100) / 100, muted: muted.value })
+	}, 1000)
 }
 
 // --- Full screen, idle UI, keyboard ------------------------------------------
@@ -378,7 +473,44 @@ function exitFullscreen() {
 }
 
 function onFullscreenChange() {
-	fullscreen.value = document.fullscreenElement === container.value
+	const now = document.fullscreenElement === container.value
+	if (now !== fullscreen.value) {
+		tracker.track(now ? 'fullscreen_enter' : 'fullscreen_exit', position())
+	}
+	fullscreen.value = now
+}
+
+// --- Page-level tracking -------------------------------------------------------
+
+function onVisibilityChange() {
+	tracker.track(document.visibilityState === 'hidden' ? 'visibility_hidden' : 'visibility_visible', position())
+	if (document.visibilityState === 'hidden') {
+		// Mobile browsers may never fire pagehide; send what we have now.
+		tracker.flush(true)
+	}
+}
+
+function onBlur() {
+	tracker.track('window_blur', position())
+}
+
+function onFocus() {
+	tracker.track('window_focus', position())
+}
+
+function onPageHide() {
+	ranges.close()
+	tracker.track('page_leave', position())
+	heartbeat.final()
+	tracker.stop()
+}
+
+function onPageShow(event) {
+	// Restored from the back/forward cache: timers and the token are stale,
+	// so start a fresh session.
+	if (event.persisted) {
+		window.location.reload()
+	}
 }
 
 function wake() {
@@ -416,8 +548,14 @@ function reload() {
 }
 
 onMounted(() => {
-	heartbeat = new Heartbeat(props.playback, playerState, stop)
+	tracker = new Tracker(props.playback.eventsUrl)
+	heartbeat = new Heartbeat(props.playback, playerState, stop, (state) => ranges.restore(state.ranges))
 	heartbeat.start()
+	document.addEventListener('visibilitychange', onVisibilityChange)
+	window.addEventListener('blur', onBlur)
+	window.addEventListener('focus', onFocus)
+	window.addEventListener('pagehide', onPageHide)
+	window.addEventListener('pageshow', onPageShow)
 
 	if (props.playback.mode === 'hls') {
 		setupHls()
@@ -439,9 +577,16 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
 	heartbeat?.stop()
+	tracker?.stop()
 	hls?.destroy()
 	window.clearInterval(watermarkTimer)
 	window.clearTimeout(idleTimer)
+	window.clearTimeout(volumeTimer)
 	document.removeEventListener('fullscreenchange', onFullscreenChange)
+	document.removeEventListener('visibilitychange', onVisibilityChange)
+	window.removeEventListener('blur', onBlur)
+	window.removeEventListener('focus', onFocus)
+	window.removeEventListener('pagehide', onPageHide)
+	window.removeEventListener('pageshow', onPageShow)
 })
 </script>

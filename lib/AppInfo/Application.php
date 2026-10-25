@@ -19,7 +19,25 @@ class Application extends App implements IBootstrap {
 	}
 
 	public function register(IRegistrationContext $context): void {
+		self::registerVendorAutoloader();
 		$context->registerEventListener(LoadAdditionalScriptsEvent::class, LoadFilesScriptsListener::class);
+	}
+
+	/**
+	 * The app's only runtime library (MaxMind's database reader, for GeoIP).
+	 * Registered by namespace instead of loading vendor/autoload.php, which
+	 * in development also maps dev-only packages.
+	 */
+	private static function registerVendorAutoloader(): void {
+		$base = __DIR__ . '/../../vendor/maxmind-db/reader/src/MaxMind/Db/';
+		spl_autoload_register(static function (string $class) use ($base): void {
+			if (str_starts_with($class, 'MaxMind\\Db\\')) {
+				$file = $base . str_replace('\\', '/', substr($class, strlen('MaxMind\\Db\\'))) . '.php';
+				if (is_file($file)) {
+					require_once $file;
+				}
+			}
+		});
 	}
 
 	public function boot(IBootContext $context): void {

@@ -1,4 +1,5 @@
 <template>
+	<div>
 	<NcSettingsSection :name="t('screenings', 'Screenings: video processing')"
 		:description="t('screenings', 'Direct MP4 and Pre-packaged HLS work on every server. Server transcode converts videos to encrypted HLS on this server with ffmpeg, which needs CPU time and temporary disk space about the size of the film.')">
 		<NcNoteCard v-if="ffmpegFound" type="success">
@@ -53,6 +54,13 @@
 			</NcButton>
 		</form>
 	</NcSettingsSection>
+
+	<GeoIpSettings :geoip="settings.geoip"
+		:saving="saving"
+		:downloading="downloading"
+		@save="save"
+		@download="downloadGeoIp" />
+	</div>
 </template>
 
 <script setup>
@@ -67,10 +75,25 @@ import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcSettingsSection from '@nextcloud/vue/components/NcSettingsSection'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, reactive, ref } from 'vue'
+import GeoIpSettings from './GeoIpSettings.vue'
 
 const settings = ref(loadState('screenings', 'adminSettings'))
 const paths = reactive({ ffmpeg: settings.value.ffmpegPath, ffprobe: settings.value.ffprobePath })
 const saving = ref(false)
+const downloading = ref(false)
+
+async function downloadGeoIp() {
+	downloading.value = true
+	try {
+		const { data } = await axios.post(generateUrl('/apps/screenings/api/admin/geoip/download'))
+		settings.value = data
+		showSuccess(t('screenings', 'Location database downloaded'))
+	} catch (error) {
+		showError(error?.response?.data?.message ?? t('screenings', 'Downloading the database failed'))
+	} finally {
+		downloading.value = false
+	}
+}
 
 const ffmpegFound = computed(() => settings.value.detected.ffmpeg !== null)
 const transcodeAvailable = computed(() => ffmpegFound.value && settings.value.detected.ffprobe !== null)

@@ -13,6 +13,7 @@ use OCA\Screenings\Media\MediaService;
 use OCA\Screenings\Media\MediaStorage;
 use OCA\Screenings\Media\Mp4Probe;
 use OCA\Screenings\Service\SubtitleService;
+use OCA\Screenings\Tracking\TrackingService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\File;
 use OCP\Files\NotFoundException;
@@ -40,6 +41,7 @@ class StreamService {
 		private Mp4Probe $mp4Probe,
 		private SubtitleService $subtitles,
 		private ViewerSessionMapper $sessions,
+		private TrackingService $tracking,
 		private IURLGenerator $urlGenerator,
 		private ITimeFactory $time,
 		ICacheFactory $cacheFactory,
@@ -73,6 +75,7 @@ class StreamService {
 				? $route('file', ['file' => MediaStorage::MASTER_PLAYLIST])
 				: $route('mp4') . '?sig=' . $this->guard->mediaSignature($sid, $request, 'mp4'),
 			'heartbeatUrl' => $route('heartbeat'),
+			'eventsUrl' => $route('events'),
 			'heartbeatSeconds' => self::HEARTBEAT_SECONDS,
 			'tokenHeader' => StreamGuard::TOKEN_HEADER,
 			'subtitles' => $subtitles,
@@ -166,6 +169,8 @@ class StreamService {
 	public function heartbeat(StreamContext $ctx, IRequest $request, array $state): array {
 		$session = $ctx->session;
 		$durationS = ($ctx->screening->getDurationMs() ?? 0) / 1000;
+		// Before last_heartbeat_at moves: the plausibility check needs the gap.
+		$this->tracking->recordRanges($session, $durationS, $state['ranges'] ?? null);
 		if (isset($state['position']) && is_numeric($state['position'])) {
 			$position = max(0.0, (float)$state['position']);
 			$session->setLastPositionS($durationS > 0 ? min($position, $durationS) : $position);

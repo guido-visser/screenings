@@ -29,6 +29,15 @@ class AdminController extends Controller {
 		return new JSONResponse($this->settings->get());
 	}
 
+	#[FrontpageRoute(verb: 'POST', url: '/api/admin/geoip/download')]
+	public function downloadGeoIp(): JSONResponse {
+		try {
+			return new JSONResponse($this->settings->downloadGeoIp());
+		} catch (ValidationException $e) {
+			return new JSONResponse(['message' => $e->getMessage()], Http::STATUS_BAD_REQUEST);
+		}
+	}
+
 	#[FrontpageRoute(verb: 'PUT', url: '/api/admin/settings')]
 	public function update(): JSONResponse {
 		$data = json_decode((string)file_get_contents('php://input'), true);

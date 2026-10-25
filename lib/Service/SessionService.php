@@ -7,6 +7,8 @@ namespace OCA\Screenings\Service;
 use OCA\Screenings\Db\Invite;
 use OCA\Screenings\Db\ViewerSession;
 use OCA\Screenings\Db\ViewerSessionMapper;
+use OCA\Screenings\Tracking\GeoIpService;
+use OCA\Screenings\Tracking\UserAgentParser;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Http\Response;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -25,6 +27,7 @@ class SessionService {
 		private ViewerSessionMapper $mapper,
 		private ISecureRandom $random,
 		private ITimeFactory $time,
+		private GeoIpService $geoIp,
 	) {
 	}
 
@@ -41,8 +44,16 @@ class SessionService {
 		$session->setInviteId($invite->getId());
 		$session->setSecretHash(hash('sha256', $secret));
 		$session->setStartedAt($now);
+		$userAgent = $request->getHeader('User-Agent');
+		$device = UserAgentParser::parse($userAgent);
+		$location = $this->geoIp->lookup($request->getRemoteAddress());
 		$session->setIp($request->getRemoteAddress());
-		$session->setUserAgent(mb_substr($request->getHeader('User-Agent'), 0, 512));
+		$session->setUserAgent(mb_substr($userAgent, 0, 512));
+		$session->setBrowser($device['browser']);
+		$session->setOs($device['os']);
+		$session->setDeviceType($device['deviceType']);
+		$session->setCountry($location['country']);
+		$session->setCity($location['city']);
 		$session->setPlaying(false);
 		$session = $this->mapper->insert($session);
 

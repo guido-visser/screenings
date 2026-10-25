@@ -8,6 +8,7 @@ use OCA\Screenings\AppInfo\Application;
 use OCA\Screenings\Stream\StreamDenied;
 use OCA\Screenings\Stream\StreamGuard;
 use OCA\Screenings\Stream\StreamService;
+use OCA\Screenings\Tracking\TrackingService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
@@ -32,6 +33,7 @@ class StreamController extends Controller {
 		IRequest $request,
 		private StreamGuard $guard,
 		private StreamService $stream,
+		private TrackingService $tracking,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -91,6 +93,23 @@ class StreamController extends Controller {
 		}
 		$state = json_decode((string)file_get_contents('php://input'), true);
 		return new JSONResponse($this->stream->heartbeat($ctx, $this->request, is_array($state) ? $state : []));
+	}
+
+	/**
+	 * A batch of player events. Also accepts navigator.sendBeacon() on page
+	 * leave, which can't read the response.
+	 */
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/stream/{sessionId}/events', requirements: ['sessionId' => '\d+'])]
+	public function events(int $sessionId): JSONResponse {
+		try {
+			$ctx = $this->guard->authorizeTracking($sessionId, $this->request);
+		} catch (StreamDenied $e) {
+			return new JSONResponse(['status' => $e->reason], $e->status);
+		}
+		$body = json_decode((string)file_get_contents('php://input'), true);
+		return new JSONResponse(['stored' => $this->tracking->recordEvents($ctx, is_array($body) ? ($body['events'] ?? null) : null)]);
 	}
 
 	private function media(Response $response): Response {

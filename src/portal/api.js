@@ -50,8 +50,12 @@ export default {
 		await axios.delete(url(`/subtitles/${id}`))
 	},
 
-	async createInvite(screeningId, name, email) {
-		return (await axios.post(url(`/screenings/${screeningId}/invites`), { name, email })).data
+	/** The result has `mailError` when the invite was created but the email failed. */
+	async createInvite(screeningId, name, email, sendEmail = false, message = '') {
+		return (await axios.post(url(`/screenings/${screeningId}/invites`), { name, email, sendEmail, message })).data
+	},
+	async sendInvite(id, message = '') {
+		return (await axios.post(url(`/invites/${id}/send`), { message })).data
 	},
 	async setInviteRevoked(id, revoked) {
 		return (await axios.post(url(`/invites/${id}/${revoked ? 'revoke' : 'restore'}`))).data

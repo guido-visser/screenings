@@ -111,6 +111,7 @@
 			<SubtitlesSection :screening-id="screening.id" :subtitles="screening.subtitles" />
 			<InvitesSection :screening-id="screening.id"
 				:invites="screening.invites"
+				:has-password="screening.hasPassword"
 				@count="(count) => emit('updated', { id: screening.id, inviteCount: count })" />
 		</template>
 	</div>

@@ -143,9 +143,29 @@ class ApiController extends Controller {
 	#[FrontpageRoute(verb: 'POST', url: '/api/screenings/{id}/invites', requirements: ['id' => '\d+'])]
 	public function createInvite(int $id, string $name = '', string $email = ''): JSONResponse {
 		return $this->handle(function () use ($id, $name, $email) {
-			$this->screenings->get($id, $this->uid());
-			return $this->invites->create($id, $name, $email);
+			$screening = $this->screenings->get($id, $this->uid());
+			$body = $this->body();
+			$invite = $this->invites->create($id, $name, $email);
+			if (!empty($body['sendEmail'])) {
+				try {
+					$invite = $this->invites->sendInvitation($screening, $invite, (string)($body['message'] ?? ''));
+				} catch (ValidationException $e) {
+					// The invite exists either way; report the mail problem alongside it.
+					return $invite->jsonSerialize() + ['mailError' => $e->getMessage()];
+				}
+			}
+			return $invite;
 		}, Http::STATUS_CREATED);
+	}
+
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/invites/{id}/send', requirements: ['id' => '\d+'])]
+	public function sendInvite(int $id): JSONResponse {
+		return $this->handle(function () use ($id) {
+			$invite = $this->ownedInvite($id);
+			$screening = $this->screenings->get($invite->getScreeningId(), $this->uid());
+			return $this->invites->sendInvitation($screening, $invite, (string)($this->body()['message'] ?? ''));
+		});
 	}
 
 	#[NoAdminRequired]

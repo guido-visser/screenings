@@ -40,6 +40,22 @@ class InviteMapper extends QBMapper {
 	}
 
 	/**
+	 * The screening's invite for an email address (case-insensitive).
+	 *
+	 * @throws DoesNotExistException
+	 */
+	public function findByEmail(int $screeningId, string $email): Invite {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('screening_id', $qb->createNamedParameter($screeningId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq($qb->func()->lower('email'), $qb->createNamedParameter(mb_strtolower($email))))
+			->orderBy('created_at', 'ASC')
+			->setMaxResults(1);
+		return $this->findEntity($qb);
+	}
+
+	/**
 	 * @return Invite[]
 	 */
 	public function findForScreening(int $screeningId): array {

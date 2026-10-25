@@ -6,6 +6,7 @@ namespace OCA\Screenings\Service;
 
 use OCA\Screenings\Db\Invite;
 use OCA\Screenings\Db\InviteMapper;
+use OCA\Screenings\Db\Screening;
 use OCA\Screenings\Exception\NotFoundException;
 use OCA\Screenings\Exception\ValidationException;
 use OCP\AppFramework\Db\DoesNotExistException;
@@ -18,6 +19,7 @@ class InviteService {
 		private InviteMapper $mapper,
 		private TrackingCleanupService $cleanup,
 		private TokenGenerator $tokens,
+		private MailService $mail,
 		private IMailer $mailer,
 		private ITimeFactory $time,
 		private IDBConnection $db,
@@ -57,6 +59,11 @@ class InviteService {
 		if (!$this->mailer->validateMailAddress($email)) {
 			throw new ValidationException('Enter a valid email address', 'email');
 		}
+		try {
+			$this->mapper->findByEmail($screeningId, $email);
+			throw new ValidationException('This email address is already invited to this screening', 'email');
+		} catch (DoesNotExistException) {
+		}
 
 		$invite = new Invite();
 		$invite->setScreeningId($screeningId);
@@ -66,6 +73,31 @@ class InviteService {
 		$invite->setSource($source);
 		$invite->setCreatedAt($this->time->getTime());
 		return $this->mapper->insert($invite);
+	}
+
+	/**
+	 * Emails the invite its personal link and records when.
+	 *
+	 * @throws ValidationException
+	 */
+	public function sendInvitation(Screening $screening, Invite $invite, string $message = ''): Invite {
+		if (mb_strlen($message) > MailService::MAX_MESSAGE) {
+			throw new ValidationException('The message is too long', 'message');
+		}
+		if ($invite->isRevoked()) {
+			throw new ValidationException('Restore access before sending an invitation');
+		}
+		$this->mail->sendInvitation($screening, $invite, $message);
+		$invite->setInvitedAt($this->time->getTime());
+		return $this->mapper->update($invite);
+	}
+
+	public function markEmailVerified(Invite $invite): Invite {
+		if ($invite->getEmailVerifiedAt() === null) {
+			$invite->setEmailVerifiedAt($this->time->getTime());
+			$invite = $this->mapper->update($invite);
+		}
+		return $invite;
 	}
 
 	public function setRevoked(Invite $invite, bool $revoked): Invite {

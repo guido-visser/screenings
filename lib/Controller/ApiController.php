@@ -16,13 +16,17 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\Attribute\FrontpageRoute;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\UserRateLimit;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 use OCP\IUserSession;
 
 /**
  * JSON API for the owner portal. Every call is scoped to the logged-in user's
- * own screenings; anything else answers 404.
+ * own screenings; anything else answers 404. Routes that start media
+ * processing or create invites carry a per-user rate limit, so a hijacked
+ * account can't tie up the server; invitation mails have their own limit in
+ * InviteService.
  */
 class ApiController extends Controller {
 	public function __construct(
@@ -52,6 +56,7 @@ class ApiController extends Controller {
 	}
 
 	#[NoAdminRequired]
+	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/screenings')]
 	public function createScreening(): JSONResponse {
 		return $this->handle(function () {
@@ -91,6 +96,7 @@ class ApiController extends Controller {
 	}
 
 	#[NoAdminRequired]
+	#[UserRateLimit(limit: 30, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/screenings/{id}/media/reprocess', requirements: ['id' => '\d+'])]
 	public function reprocessMedia(int $id): JSONResponse {
 		return $this->handle(fn () => $this->screenings->toArray($this->screenings->reprocessMedia($id, $this->uid())));
@@ -140,6 +146,7 @@ class ApiController extends Controller {
 	}
 
 	#[NoAdminRequired]
+	#[UserRateLimit(limit: 300, period: 3600)]
 	#[FrontpageRoute(verb: 'POST', url: '/api/screenings/{id}/invites', requirements: ['id' => '\d+'])]
 	public function createInvite(int $id, string $name = '', string $email = ''): JSONResponse {
 		return $this->handle(function () use ($id, $name, $email) {

@@ -28,6 +28,25 @@ docker compose up -d --build
 - The `frontend` container watches `src/` and rebuilds `js/` on every change (it polls, because file events from a Windows or macOS host don't reach the container). Do a hard refresh (Ctrl+Shift+R) to see changes; the browser caches the app's scripts.
 - PHP edits take effect on the next request.
 - After adding a bundle to `vite.config.js`, restart the watcher: `docker compose restart frontend`.
+- The first start takes a few minutes while Nextcloud installs. Follow progress with `docker compose logs -f nextcloud`.
+
+Useful commands (run from `dev/`):
+
+```bash
+docker compose exec -u www-data nextcloud php occ app:list | grep screenings
+docker compose exec -u www-data nextcloud php occ log:tail
+docker compose run --rm composer install
+```
+
+To test a server **without ffmpeg**:
+
+```bash
+docker compose build --build-arg SCREENINGS_NO_FFMPEG=1 nextcloud cron && docker compose up -d
+```
+
+Pages:
+- Portal: http://localhost:8080/index.php/apps/screenings/
+- Viewer: http://localhost:8080/index.php/apps/screenings/s/<invite-token>
 
 ## Video delivery modes
 
@@ -53,6 +72,7 @@ Each screening has a **Dashboard** tab that shows:
 - **Totals:** invited, opened the link, started watching, watching now, average watched.
 - **Heatmap:** which parts of the film viewers actually played.
 - **Viewer table:** live status, how much each person watched, how far they got, how often they opened the link, and their device and location.
+- **Unconfirmed visitors:** open-link visitors who asked for an email code but never entered it, with how many codes and wrong attempts.
 
 Click a viewer to see their sessions (device, screen, location, IP), a heatmap of how often they watched each part, and a filterable timeline of everything they did. Live data refreshes every 5 seconds.
 
@@ -70,22 +90,29 @@ Every media request (`/apps/screenings/stream/<session>/…`) must have:
 Revoking an invite or reaching the expiry date stops playback within one heartbeat (about 5 s). HLS segments are AES-128 encrypted, and the key is served under the same rules.
 
 **What this does and doesn't stop.** Copying a playlist or video URL from devtools into ffmpeg or a download tool fails (403). So does copying the cookie and token to another machine. A script on the viewer's own machine that copies the session and fakes heartbeats can still pull the film, at about 3× real time at most. Screen recording can't be prevented without DRM. The optional watermark makes leaks traceable to a person.
-- The first start takes a few minutes while Nextcloud installs. Follow progress with `docker compose logs -f nextcloud`.
 
-Useful commands (run from `dev/`):
+## Data retention and privacy
+
+- Each screening has a **retention period** (Settings, default 365 days). A daily background job deletes viewer sessions, watched ranges and events older than that; a session counts from its last heartbeat. Invites stay, so the guest list is kept. Expired email codes are deleted by the same job.
+- Deleting an invite or a screening deletes its tracking data immediately, and deleting a screening also deletes its encrypted media copy.
+- Deleting a Nextcloud user deletes all of their screenings, with invites, tracking data and media.
+
+## Abuse limits
+
+| What | Limit |
+|---|---|
+| Unknown `/s/<token>` links | Nextcloud brute-force protection per IP: after 10 misses in 30 minutes that IP gets 429 for a while (valid links included) |
+| Screening password, email code | Brute-force protection per IP; an email code allows 5 attempts and expires after 10 minutes |
+| Requesting email codes | 10 per IP per 15 minutes, and 3 per email address per screening per 15 minutes |
+| Invitation emails | 100 per owner per hour |
+| Creating screenings, "Process again" | 30 per owner per hour |
+| Creating invites | 300 per owner per hour |
+| Player events | 1500 per viewer session per hour |
+
+## Building a release
 
 ```bash
-docker compose exec -u www-data nextcloud php occ app:list | grep screenings
-docker compose exec -u www-data nextcloud php occ log:tail
-docker compose run --rm composer install
+sh build/package.sh
 ```
 
-To test a server **without ffmpeg**:
-
-```bash
-docker compose build --build-arg SCREENINGS_NO_FFMPEG=1 nextcloud cron && docker compose up -d
-```
-
-Pages:
-- Portal: http://localhost:8080/index.php/apps/screenings/
-- Viewer (stub): http://localhost:8080/index.php/apps/screenings/s/abcdefghijklmnop0123
+This writes `build/screenings-<version>.tar.gz`, ready to extract into a server's `custom_apps/`. It builds from a clean copy of the repository (tracked and untracked, not ignored files), using local `npm` and `composer` if they are installed and the `node:24-alpine` and `composer:2` Docker images otherwise. The package contains `appinfo/`, `lib/`, `templates/`, `img/`, the production `js/` build without source maps, and only `vendor/maxmind-db/reader` (loaded by the app's own autoloader). For the Nextcloud app store, sign the extracted folder with `occ integrity:sign-app`.

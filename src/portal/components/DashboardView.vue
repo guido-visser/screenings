@@ -111,6 +111,46 @@
 					</table>
 				</div>
 			</section>
+
+			<section v-if="pending.length" class="dashboard__section">
+				<h3>{{ t('screenings', 'Asked for a code, not confirmed') }}</h3>
+				<p class="dashboard__muted dashboard__intro">
+					{{ t('screenings', 'Visitors of the open link who requested an email code but never entered it. They become viewers once they confirm.') }}
+				</p>
+				<div class="dashboard__table-wrap">
+					<table class="viewers viewers--static">
+						<thead>
+							<tr>
+								<th>{{ t('screenings', 'Visitor') }}</th>
+								<th class="viewers__num">
+									{{ t('screenings', 'Codes sent') }}
+								</th>
+								<th class="viewers__num">
+									{{ t('screenings', 'Wrong codes') }}
+								</th>
+								<th>{{ t('screenings', 'Last request') }}</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr v-for="visitor in pending" :key="visitor.email">
+								<td>
+									<span class="viewers__name">{{ visitor.name || visitor.email }}</span>
+									<span v-if="visitor.name" class="viewers__email">{{ visitor.email }}</span>
+								</td>
+								<td class="viewers__num">
+									{{ visitor.codes }}
+								</td>
+								<td class="viewers__num">
+									{{ visitor.failed }}
+								</td>
+								<td class="dashboard__muted">
+									{{ formatRelative(Math.floor(visitor.lastAt / 1000)) }}
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</section>
 		</template>
 	</div>
 </template>
@@ -141,6 +181,7 @@ let fullTimer = null
 
 const totals = computed(() => data.value.totals)
 const viewers = computed(() => data.value.viewers)
+const pending = computed(() => data.value.pending ?? [])
 const watchingNow = computed(() => viewers.value.filter((v) => v.live).length)
 const heatmapSummary = computed(() => t('screenings', 'Heatmap of the film\'s timeline showing how many of the {count} viewers watched each part. The viewer table below lists each viewer\'s progress.', { count: data.value.heatmap.max }))
 
@@ -274,6 +315,18 @@ onBeforeUnmount(() => {
 
 .viewers tbody tr:hover {
 	background: var(--color-background-hover);
+}
+
+.viewers--static tbody tr {
+	cursor: default;
+}
+
+.viewers--static tbody tr:hover {
+	background: none;
+}
+
+.dashboard__intro {
+	margin: -4px 0 12px;
 }
 
 .viewers__row--revoked td {

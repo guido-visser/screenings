@@ -99,13 +99,20 @@ function detectDark() {
 	dark.value = 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5
 }
 
+// Watch both: a theme picked in Nextcloud changes body attributes, while the
+// "default" theme follows the OS without touching the DOM.
 let themeObserver = null
+const colorScheme = window.matchMedia?.('(prefers-color-scheme: dark)')
 onMounted(() => {
 	detectDark()
 	themeObserver = new MutationObserver(detectDark)
 	themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-themes', 'class', 'style'] })
+	colorScheme?.addEventListener('change', detectDark)
 })
-onBeforeUnmount(() => themeObserver?.disconnect())
+onBeforeUnmount(() => {
+	themeObserver?.disconnect()
+	colorScheme?.removeEventListener('change', detectDark)
+})
 </script>
 
 <style scoped>

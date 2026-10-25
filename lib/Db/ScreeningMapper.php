@@ -100,4 +100,20 @@ class ScreeningMapper extends QBMapper {
 			->orderBy('created_at', 'DESC');
 		return $this->findEntities($qb);
 	}
+
+	/**
+	 * @return array<int, int> screening id => retention in days
+	 */
+	public function findRetentionDays(): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('id', 'retention_days')
+			->from($this->getTableName());
+		$result = $qb->executeQuery();
+		$map = [];
+		while ($row = $result->fetch()) {
+			$map[(int)$row['id']] = (int)$row['retention_days'];
+		}
+		$result->closeCursor();
+		return $map;
+	}
 }

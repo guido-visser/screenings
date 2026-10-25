@@ -5,7 +5,7 @@
 	<name>Screenings</name>
 	<summary>Share private, tracked film screenings</summary>
 	<description><![CDATA[Send confidential screening links for a film and see exactly how each viewer watched it: opens, playback progress, pauses, seeks, subtitles and more.]]></description>
-	<version>0.3.1</version>
+	<version>0.3.2</version>
 	<licence>agpl</licence>
 	<author mail="guido.vsr@gmail.com">Guido</author>
 	<namespace>Screenings</namespace>
@@ -17,6 +17,7 @@
 	</dependencies>
 	<background-jobs>
 		<job>OCA\Screenings\BackgroundJob\GeoIpUpdateJob</job>
+		<job>OCA\Screenings\BackgroundJob\RetentionJob</job>
 	</background-jobs>
 	<commands>
 		<command>OCA\Screenings\Command\ProcessMedia</command>

@@ -6,10 +6,12 @@ namespace OCA\Screenings\AppInfo;
 
 use OCA\Files\Event\LoadAdditionalScriptsEvent;
 use OCA\Screenings\Listener\LoadFilesScriptsListener;
+use OCA\Screenings\Listener\UserDeletedListener;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\User\Events\UserDeletedEvent;
 
 class Application extends App implements IBootstrap {
 	public const APP_ID = 'screenings';
@@ -21,6 +23,7 @@ class Application extends App implements IBootstrap {
 	public function register(IRegistrationContext $context): void {
 		self::registerVendorAutoloader();
 		$context->registerEventListener(LoadAdditionalScriptsEvent::class, LoadFilesScriptsListener::class);
+		$context->registerEventListener(UserDeletedEvent::class, UserDeletedListener::class);
 	}
 
 	/**

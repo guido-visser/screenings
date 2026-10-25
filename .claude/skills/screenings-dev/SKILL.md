@@ -54,6 +54,12 @@ D="/c/Program Files/Docker/Docker/resources/bin/docker.exe"
 - **`occ` vs container paths:** app files are at `/var/www/html/custom_apps/screenings`, and data at `/var/www/html/data` (appdata is in `data/appdata_*/screenings/`).
 - **Routes** are attributes (`#[FrontpageRoute]`), and route names are `screenings.<controller>.<method>`.
 - **Remote IP:** the dev Nextcloud sees every request from `172.18.0.1`, because the host comes through the Docker gateway. To test GeoIP or IP-bound logic, temporarily run `occ config:system:set trusted_proxies 0 --value=172.18.0.0/16`, send `X-Forwarded-For`, then delete the setting.
+- **Brute-force protection in NC 35 doesn't sleep.** It counts attempts and answers 429 once an IP passes 10 misses in 30 minutes, for every route of that action (valid links too). Testing it blocks your own host: reset with `occ security:bruteforce:reset 172.18.0.1`. Inspect with `occ security:bruteforce:attempts 172.18.0.1 <action>`.
+- **Owner API from curl:** basic auth with the admin credentials from `dev/.env` plus the header `OCS-APIREQUEST: true` passes the CSRF check, so `curl -u "$NC_ADMIN_USER:$NC_ADMIN_PASSWORD" -H 'OCS-APIREQUEST: true' …/apps/screenings/api/…` works. Source `dev/.env` with `set -a; . dev/.env; set +a`.
+- **Second accounts for IDOR tests:** `occ user:add --password-from-env` with `-e OC_PASS=…` on `compose exec`. Deleting such users afterwards leaves harmless "Backends provided no user object" errors from core's metadata job in the log.
+- **Background jobs on demand:** `occ background-job:list --class '<FQCN>'` shows the id, `occ background-job:execute --force-execute <id>` runs it now.
+- **Direct MP4 duration:** `occ screenings:process-media` skips Direct MP4. To re-probe one, use `POST /api/screenings/<id>/media/reprocess` ("Process again").
+- **Light theme:** the admin account uses Nextcloud's "default" theme, which follows the OS. Test light/dark with the browser pane's `resize_window` `colorScheme`, not by changing the user's theming setting.
 
 ## Browser checks (in-app browser pane)
 
@@ -68,6 +74,7 @@ D="/c/Program Files/Docker/Docker/resources/bin/docker.exe"
 - **`verify-hls.sh <screeningId> <mediaToken>`** (run inside the container after `compose cp` to `/tmp`): checks that segments are unreadable without the key and that every variant decodes with it.
 - **`geoip-check.php`** (inside the container): GeoIpService status and lookups against MaxMind's test database.
 - **`nc-errors.py`:** filters `nextcloud.log` down to real errors.
+- **`build/package.sh`** (repo root, not in `scripts/`): builds the release tarball. To check a package, run the dev image standalone with SQLite (`docker run -d --name scr-pkgtest -e SQLITE_DATABASE=nc -e NEXTCLOUD_ADMIN_USER=admin -e NEXTCLOUD_ADMIN_PASSWORD=… -e NEXTCLOUD_TRUSTED_DOMAINS=localhost -p 8090:80 screenings-dev-nextcloud`), extract the tarball into its `custom_apps/`, `occ app:enable screenings`, then remove the container.
 
 To get a viewer page's initial state (including `playback`) with curl:
 `grep -o 'id="initial-state-screenings-viewer" value="[^"]*"' | sed 's/.*value="//; s/"$//' | base64 -d`.

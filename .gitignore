@@ -4,3 +4,5 @@
 /css/
 /dev/.env
 .phpunit.result.cache
+/build/work/
+/build/*.tar.gz

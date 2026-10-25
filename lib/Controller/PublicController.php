@@ -64,12 +64,15 @@ class PublicController extends Controller {
 
 	#[PublicPage]
 	#[NoCSRFRequired]
+	// Unknown tokens slow down further guesses from the same IP.
+	#[BruteForceProtection(action: 'screenings_link')]
 	#[FrontpageRoute(verb: 'GET', url: '/s/{token}', requirements: ['token' => self::TOKEN])]
 	public function show(string $token): TemplateResponse {
 		$response = new TemplateResponse(Application::APP_ID, 'viewer', [], TemplateResponse::RENDER_AS_BASE);
 		$resolved = $this->access->resolve($token);
 		if ($resolved === null) {
 			$response->setStatus(Http::STATUS_NOT_FOUND);
+			$response->throttle(['token' => $token]);
 			return $this->render($response, $token, 'unavailable');
 		}
 
@@ -146,7 +149,10 @@ class PublicController extends Controller {
 		} catch (ValidationException $e) {
 			return new JSONResponse(['message' => $e->getMessage(), 'field' => $e->getField()], Http::STATUS_BAD_REQUEST);
 		}
-		$this->events->log($screening->getId(), null, null, EventLogger::OTP_REQUESTED, ['email' => OtpService::normalizeEmail($email)]);
+		$this->events->log($screening->getId(), null, null, EventLogger::OTP_REQUESTED, [
+			'email' => OtpService::normalizeEmail($email),
+			'name' => trim($name),
+		]);
 		return new JSONResponse(['sent' => true]);
 	}
 

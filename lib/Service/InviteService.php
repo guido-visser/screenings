@@ -12,9 +12,19 @@ use OCA\Screenings\Exception\ValidationException;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IDBConnection;
+use OCP\IUserSession;
 use OCP\Mail\IMailer;
+use OCP\Security\RateLimiting\ILimiter;
+use OCP\Security\RateLimiting\IRateLimitExceededException;
 
 class InviteService {
+	/**
+	 * Invitation mails per owner and hour. Plenty for a real guest list, but it
+	 * stops a hijacked account from turning the server into a spam relay.
+	 */
+	public const MAIL_LIMIT = 100;
+	public const MAIL_PERIOD = 3600;
+
 	public function __construct(
 		private InviteMapper $mapper,
 		private TrackingCleanupService $cleanup,
@@ -23,6 +33,8 @@ class InviteService {
 		private IMailer $mailer,
 		private ITimeFactory $time,
 		private IDBConnection $db,
+		private ILimiter $limiter,
+		private IUserSession $userSession,
 	) {
 	}
 
@@ -86,6 +98,14 @@ class InviteService {
 		}
 		if ($invite->isRevoked()) {
 			throw new ValidationException('Restore access before sending an invitation');
+		}
+		$user = $this->userSession->getUser();
+		if ($user !== null) {
+			try {
+				$this->limiter->registerUserRequest('screenings_invite_mail', self::MAIL_LIMIT, self::MAIL_PERIOD, $user);
+			} catch (IRateLimitExceededException) {
+				throw new ValidationException('Too many invitations sent in the last hour. Try again later.');
+			}
 		}
 		$this->mail->sendInvitation($screening, $invite, $message);
 		$invite->setInvitedAt($this->time->getTime());

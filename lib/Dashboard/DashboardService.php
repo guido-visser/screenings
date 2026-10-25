@@ -21,6 +21,8 @@ class DashboardService {
 	/** A session is "watching now" when its last heartbeat is this recent. */
 	public const LIVE_SECONDS = 20;
 	public const EVENTS_PAGE = 300;
+	/** Code requests without an invite read per screening; the rate limits keep this small. */
+	public const PENDING_EVENTS = 5000;
 
 	public function __construct(
 		private InviteMapper $invites,
@@ -79,6 +81,7 @@ class DashboardService {
 				'max' => count($viewerRanges),
 			],
 			'viewers' => $viewers,
+			'pending' => $this->pendingVisitors($screening->getId(), $invites),
 		];
 	}
 
@@ -246,6 +249,49 @@ class DashboardService {
 		}
 		$result->closeCursor();
 		return $counts;
+	}
+
+	/**
+	 * Open-link visitors who asked for a code but never confirmed it. Their
+	 * events have no invite yet, only the email address in the payload.
+	 *
+	 * @param Invite[] $invites
+	 * @return list<array{email: string, name: ?string, codes: int, failed: int, lastAt: int}> newest first
+	 */
+	private function pendingVisitors(int $screeningId, array $invites): array {
+		$known = [];
+		foreach ($invites as $invite) {
+			$known[mb_strtolower($invite->getEmail())] = true;
+		}
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('type', 'payload', 'server_ts_ms')
+			->from('scr_events')
+			->where($qb->expr()->eq('screening_id', $qb->createNamedParameter($screeningId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->isNull('invite_id'))
+			->andWhere($qb->expr()->in('type', $qb->createNamedParameter(['otp_requested', 'otp_fail'], IQueryBuilder::PARAM_STR_ARRAY)))
+			->orderBy('id', 'DESC')
+			->setMaxResults(self::PENDING_EVENTS);
+		$result = $qb->executeQuery();
+		$visitors = [];
+		while ($row = $result->fetch()) {
+			$payload = $row['payload'] === null ? null : json_decode($row['payload'], true);
+			$email = is_array($payload) && is_string($payload['email'] ?? null) ? $payload['email'] : null;
+			if ($email === null || isset($known[$email])) {
+				continue;
+			}
+			$visitor = $visitors[$email] ?? ['email' => $email, 'name' => null, 'codes' => 0, 'failed' => 0, 'lastAt' => 0];
+			if ($row['type'] === 'otp_requested') {
+				$visitor['codes']++;
+				// Newest first, so the first name seen is the latest one given.
+				$visitor['name'] ??= is_string($payload['name'] ?? null) ? $payload['name'] : null;
+			} else {
+				$visitor['failed']++;
+			}
+			$visitor['lastAt'] = max($visitor['lastAt'], (int)$row['server_ts_ms']);
+			$visitors[$email] = $visitor;
+		}
+		$result->closeCursor();
+		return array_values($visitors);
 	}
 
 	private function events(int $inviteId, ?int $beforeId): array {

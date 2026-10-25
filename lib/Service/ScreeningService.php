@@ -9,6 +9,7 @@ use OCA\Screenings\Db\Screening;
 use OCA\Screenings\Db\ScreeningMapper;
 use OCA\Screenings\Exception\NotFoundException;
 use OCA\Screenings\Exception\ValidationException;
+use OCA\Screenings\Media\MediaService;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\Files\File;
@@ -20,6 +21,8 @@ use OCP\Security\IHasher;
 class ScreeningService {
 	public const MAX_TITLE = 255;
 	public const MAX_RETENTION_DAYS = 3650;
+	/** ISO base media files Direct MP4 can stream (.mp4, .m4v, .mov). */
+	public const MP4_MIMES = ['video/mp4', 'video/x-m4v', 'video/quicktime'];
 
 	public function __construct(
 		private ScreeningMapper $mapper,
@@ -27,6 +30,7 @@ class ScreeningService {
 		private SubtitleService $subtitles,
 		private TrackingCleanupService $cleanup,
 		private DeliveryModes $modes,
+		private MediaService $media,
 		private TokenGenerator $tokens,
 		private IHasher $hasher,
 		private IRootFolder $rootFolder,
@@ -86,8 +90,13 @@ class ScreeningService {
 		$screening->setCreatedAt($now);
 		$screening->setUpdatedAt($now);
 
-		$this->apply($screening, $data + ['title' => ''], $uid);
-		return $this->mapper->insert($screening);
+		$mediaChanged = $this->apply($screening, $data + ['title' => ''], $uid);
+		if ($mediaChanged) {
+			$this->media->prepare($screening);
+		}
+		$screening = $this->mapper->insert($screening);
+		$this->media->queueIfPending($screening);
+		return $screening;
 	}
 
 	/**
@@ -96,9 +105,30 @@ class ScreeningService {
 	 */
 	public function update(int $id, string $uid, array $data): Screening {
 		$screening = $this->get($id, $uid);
-		$this->apply($screening, $data, $uid);
+		// Validate everything before touching media, so a rejected update
+		// never discards already processed media.
+		$mediaChanged = $this->apply($screening, $data, $uid);
+		if ($mediaChanged) {
+			$this->media->prepare($screening);
+		}
 		$screening->setUpdatedAt($this->time->getTime());
-		return $this->mapper->update($screening);
+		$screening = $this->mapper->update($screening);
+		$this->media->queueIfPending($screening);
+		return $screening;
+	}
+
+	/**
+	 * Prepares the media again, e.g. after an error or a changed source file.
+	 *
+	 * @throws NotFoundException
+	 */
+	public function reprocessMedia(int $id, string $uid): Screening {
+		$screening = $this->get($id, $uid);
+		$this->media->prepare($screening);
+		$screening->setUpdatedAt($this->time->getTime());
+		$screening = $this->mapper->update($screening);
+		$this->media->queueIfPending($screening);
+		return $screening;
 	}
 
 	/**
@@ -127,6 +157,7 @@ class ScreeningService {
 				$this->inviteMapper->delete($invite);
 			}
 			$this->subtitles->deleteAllForScreening($id);
+			$this->media->deleteMedia($screening);
 			$this->mapper->delete($screening);
 			$this->db->commit();
 		} catch (\Throwable $e) {
@@ -138,9 +169,10 @@ class ScreeningService {
 	/**
 	 * Applies the fields present in $data. Absent keys are left unchanged.
 	 *
+	 * @return bool whether the source or delivery mode changed
 	 * @throws ValidationException
 	 */
-	private function apply(Screening $screening, array $data, string $uid): void {
+	private function apply(Screening $screening, array $data, string $uid): bool {
 		if (array_key_exists('title', $data)) {
 			$title = trim((string)$data['title']);
 			if ($title === '') {
@@ -178,8 +210,7 @@ class ScreeningService {
 		}
 
 		if ($mediaChanged) {
-			$this->validateSourceForMode($screening, $uid);
-			$this->resetMedia($screening);
+			$this->validateSourceForMode($screening);
 		}
 
 		if (array_key_exists('password', $data)) {
@@ -210,6 +241,8 @@ class ScreeningService {
 			}
 			$screening->setRetentionDays($days);
 		}
+
+		return $mediaChanged;
 	}
 
 	/**
@@ -230,48 +263,34 @@ class ScreeningService {
 	/**
 	 * @throws ValidationException
 	 */
-	private function validateSourceForMode(Screening $screening, string $uid): void {
-		$file = $this->sourceFile($screening);
+	private function validateSourceForMode(Screening $screening): void {
+		$file = $this->media->sourceFile($screening);
 		if ($file === null) {
 			return;
 		}
 		$isPlaylist = strtolower(pathinfo($file->getName(), PATHINFO_EXTENSION)) === 'm3u8';
-		$isVideo = str_starts_with($file->getMimetype(), 'video/');
+		$mime = $file->getMimetype();
 
-		if ($screening->getDeliveryMode() === Screening::MODE_HLS && !$isPlaylist) {
-			throw new ValidationException('Pre-packaged HLS needs the .m3u8 playlist file', 'sourcePath');
+		switch ($screening->getDeliveryMode()) {
+			case Screening::MODE_HLS:
+				if (!$isPlaylist) {
+					throw new ValidationException('Pre-packaged HLS needs the .m3u8 playlist file', 'sourcePath');
+				}
+				break;
+			case Screening::MODE_MP4:
+				if (!in_array($mime, self::MP4_MIMES, true)) {
+					throw new ValidationException('Direct MP4 needs an .mp4 file. Other formats need Server transcode.', 'sourcePath');
+				}
+				break;
+			default:
+				if (!str_starts_with($mime, 'video/')) {
+					throw new ValidationException('Select a video file', 'sourcePath');
+				}
 		}
-		if ($screening->getDeliveryMode() !== Screening::MODE_HLS && !$isVideo) {
-			throw new ValidationException('Select a video file', 'sourcePath');
-		}
-	}
-
-	private function resetMedia(Screening $screening): void {
-		$screening->setMediaProgress(0);
-		$screening->setMediaError(null);
-		$screening->setDurationMs(null);
-		if ($screening->getSourceFileId() === null) {
-			$screening->setMediaStatus(Screening::MEDIA_NONE);
-		} elseif ($screening->getDeliveryMode() === Screening::MODE_MP4) {
-			// Direct MP4 needs no processing. Faststart checks arrive in phase 3.
-			$screening->setMediaStatus(Screening::MEDIA_READY);
-		} else {
-			// Picked up by the media background job (phase 3).
-			$screening->setMediaStatus(Screening::MEDIA_PENDING);
-		}
-	}
-
-	private function sourceFile(Screening $screening): ?File {
-		$fileId = $screening->getSourceFileId();
-		if ($fileId === null) {
-			return null;
-		}
-		$node = $this->rootFolder->getUserFolder($screening->getOwnerUid())->getFirstNodeById($fileId);
-		return $node instanceof File ? $node : null;
 	}
 
 	private function sourcePath(Screening $screening): ?string {
-		$file = $this->sourceFile($screening);
+		$file = $this->media->sourceFile($screening);
 		if ($file === null) {
 			return null;
 		}

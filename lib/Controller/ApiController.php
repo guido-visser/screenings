@@ -91,6 +91,12 @@ class ApiController extends Controller {
 	}
 
 	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/screenings/{id}/media/reprocess', requirements: ['id' => '\d+'])]
+	public function reprocessMedia(int $id): JSONResponse {
+		return $this->handle(fn () => $this->screenings->toArray($this->screenings->reprocessMedia($id, $this->uid())));
+	}
+
+	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'POST', url: '/api/screenings/{id}/open-link/regenerate', requirements: ['id' => '\d+'])]
 	public function regenerateOpenLink(int $id): JSONResponse {
 		return $this->handle(function () use ($id) {

@@ -49,8 +49,13 @@
 							{{ form.deliveryMode === 'hls' ? t('screenings', 'Choose .m3u8 playlist') : t('screenings', 'Choose video') }}
 						</NcButton>
 					</div>
-					<p class="screening__status">
-						{{ t('screenings', 'Media status:') }} <strong>{{ statusLabel }}</strong>
+					<HlsHelp v-if="form.deliveryMode === 'hls' && !screening.sourcePath" />
+					<MediaStatus v-if="!mediaFormChanged"
+						:screening="screening"
+						:busy="reprocessing"
+						@reprocess="reprocess" />
+					<p v-else class="screening__status">
+						{{ t('screenings', 'Save to prepare the selected video.') }}
 					</p>
 				</section>
 
@@ -126,10 +131,12 @@ import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcPasswordField from '@nextcloud/vue/components/NcPasswordField'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import api, { errorMessage, publicLink } from '../api.js'
 import { copyLink } from '../clipboard.js'
+import HlsHelp from './HlsHelp.vue'
 import InvitesSection from './InvitesSection.vue'
+import MediaStatus from './MediaStatus.vue'
 import SubtitlesSection from './SubtitlesSection.vue'
 
 const props = defineProps({
@@ -157,29 +164,56 @@ const allModes = [
 ]
 const modes = allModes.filter((mode) => availableModes.includes(mode.id))
 
-const statusLabels = {
-	none: t('screenings', 'No video selected'),
-	pending: t('screenings', 'Waiting for processing'),
-	processing: t('screenings', 'Processing'),
-	ready: t('screenings', 'Ready'),
-	error: t('screenings', 'Error'),
-}
+const MEDIA_FIELDS = ['mediaStatus', 'mediaProgress', 'mediaError', 'mediaWarning', 'durationMs']
+const POLL_MS = 3000
 
 const screening = ref(null)
 const form = ref({})
 const saving = ref(false)
+const reprocessing = ref(false)
+let pollTimer = null
 
 const openLink = computed(() => publicLink(screening.value.openLinkToken))
-const statusLabel = computed(() => {
-	const s = screening.value
-	if (s.mediaStatus === 'processing') {
-		return `${statusLabels.processing} (${s.mediaProgress}%)`
+const mediaFormChanged = computed(() => form.value.deliveryMode !== screening.value.deliveryMode
+	|| form.value.sourcePath !== screening.value.sourcePath)
+const mediaBusy = computed(() => ['pending', 'processing'].includes(screening.value?.mediaStatus))
+
+/**
+ * While media is processing, refresh only the media fields so the owner's
+ * unsaved edits in the form are left alone.
+ */
+async function poll() {
+	pollTimer = null
+	try {
+		const fresh = await api.getScreening(props.screeningId)
+		for (const field of MEDIA_FIELDS) {
+			screening.value[field] = fresh[field]
+		}
+	} catch {
+		// Try again on the next tick.
 	}
-	if (s.mediaStatus === 'error' && s.mediaError) {
-		return `${statusLabels.error}: ${s.mediaError}`
+	schedulePoll()
+}
+
+function schedulePoll() {
+	if (pollTimer === null && mediaBusy.value) {
+		pollTimer = window.setTimeout(poll, POLL_MS)
 	}
-	return statusLabels[s.mediaStatus] ?? s.mediaStatus
-})
+}
+
+watch(mediaBusy, schedulePoll)
+onBeforeUnmount(() => window.clearTimeout(pollTimer))
+
+async function reprocess() {
+	reprocessing.value = true
+	try {
+		applySaved(await api.reprocessMedia(props.screeningId))
+	} catch (error) {
+		showError(errorMessage(error, t('screenings', 'Could not start processing')))
+	} finally {
+		reprocessing.value = false
+	}
+}
 
 function toForm(s) {
 	return {

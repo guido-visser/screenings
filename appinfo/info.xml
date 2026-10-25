@@ -5,7 +5,7 @@
 	<name>Screenings</name>
 	<summary>Share private, tracked film screenings</summary>
 	<description><![CDATA[Send confidential screening links for a film and see exactly how each viewer watched it: opens, playback progress, pauses, seeks, subtitles and more.]]></description>
-	<version>0.2.0</version>
+	<version>0.3.0</version>
 	<licence>agpl</licence>
 	<author mail="guido.vsr@gmail.com">Guido</author>
 	<namespace>Screenings</namespace>
@@ -15,6 +15,13 @@
 		<php min-version="8.3"/>
 		<nextcloud min-version="35" max-version="35"/>
 	</dependencies>
+	<commands>
+		<command>OCA\Screenings\Command\ProcessMedia</command>
+	</commands>
+	<settings>
+		<admin>OCA\Screenings\Settings\Admin</admin>
+		<admin-section>OCA\Screenings\Settings\AdminSection</admin-section>
+	</settings>
 	<navigations>
 		<navigation>
 			<name>Screenings</name>

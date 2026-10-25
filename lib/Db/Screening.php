@@ -24,6 +24,10 @@ use OCP\AppFramework\Db\Entity;
  * @method void setMediaProgress(int $mediaProgress)
  * @method ?string getMediaError()
  * @method void setMediaError(?string $mediaError)
+ * @method ?string getMediaToken()
+ * @method void setMediaToken(?string $mediaToken)
+ * @method ?string getMediaWarning()
+ * @method void setMediaWarning(?string $mediaWarning)
  * @method ?int getDurationMs()
  * @method void setDurationMs(?int $durationMs)
  * @method ?string getPasswordHash()
@@ -63,6 +67,8 @@ class Screening extends Entity implements JsonSerializable {
 	protected $mediaStatus;
 	protected $mediaProgress;
 	protected $mediaError;
+	protected $mediaToken;
+	protected $mediaWarning;
 	protected $durationMs;
 	protected $passwordHash;
 	protected $expiresAt;
@@ -99,6 +105,7 @@ class Screening extends Entity implements JsonSerializable {
 			'mediaStatus' => $this->mediaStatus,
 			'mediaProgress' => $this->mediaProgress,
 			'mediaError' => $this->mediaError,
+			'mediaWarning' => $this->mediaWarning,
 			'durationMs' => $this->durationMs,
 			'hasPassword' => $this->passwordHash !== null,
 			'expiresAt' => $this->expiresAt,

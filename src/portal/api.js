@@ -29,6 +29,9 @@ export default {
 	async deleteScreening(id) {
 		await axios.delete(url(`/screenings/${id}`))
 	},
+	async reprocessMedia(id) {
+		return (await axios.post(url(`/screenings/${id}/media/reprocess`))).data
+	},
 	async regenerateOpenLink(id) {
 		return (await axios.post(url(`/screenings/${id}/open-link/regenerate`))).data
 	},

@@ -32,6 +32,34 @@ class ScreeningMapper extends QBMapper {
 	/**
 	 * @throws DoesNotExistException
 	 */
+	public function findById(int $id): Screening {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)));
+		return $this->findEntity($qb);
+	}
+
+	/**
+	 * Media writes from a processing run only apply while that run is current.
+	 *
+	 * @param array<string, mixed> $values column => value
+	 * @return bool false when the run was superseded (token changed)
+	 */
+	public function updateMediaIfCurrent(int $id, string $token, array $values): bool {
+		$qb = $this->db->getQueryBuilder();
+		$qb->update($this->getTableName());
+		foreach ($values as $column => $value) {
+			$qb->set($column, $qb->createNamedParameter($value, is_int($value) ? IQueryBuilder::PARAM_INT : IQueryBuilder::PARAM_STR));
+		}
+		$qb->where($qb->expr()->eq('id', $qb->createNamedParameter($id, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('media_token', $qb->createNamedParameter($token)));
+		return $qb->executeStatement() > 0;
+	}
+
+	/**
+	 * @throws DoesNotExistException
+	 */
 	public function findByOpenLinkToken(string $token): Screening {
 		$qb = $this->db->getQueryBuilder();
 		$qb->select('*')

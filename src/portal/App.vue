@@ -7,11 +7,13 @@
 						<NcIconSvgWrapper :path="mdiPlus" />
 					</template>
 				</NcAppNavigationNew>
+				<!-- A real href: with a click handler the item's default href="#"
+					navigation would run afterwards and clear the selection. -->
 				<NcAppNavigationItem v-for="screening in screenings"
 					:key="screening.id"
 					:name="screening.title"
-					:active="screening.id === selectedId"
-					@click="select(screening.id)">
+					:href="screeningHash(screening.id)"
+					:active="screening.id === selectedId">
 					<template #icon>
 						<NcIconSvgWrapper :path="mdiMovieOpenOutline" />
 					</template>
@@ -105,8 +107,12 @@ function onHashChange() {
 	selectedId.value = idFromHash()
 }
 
+function screeningHash(id) {
+	return `#/screenings/${id}`
+}
+
 function select(id) {
-	window.location.hash = id === null ? '' : `#/screenings/${id}`
+	window.location.hash = id === null ? '' : screeningHash(id)
 	selectedId.value = id
 }
 

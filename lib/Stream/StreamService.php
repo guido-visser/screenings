@@ -12,6 +12,7 @@ use OCA\Screenings\Media\MediaException;
 use OCA\Screenings\Media\MediaService;
 use OCA\Screenings\Media\MediaStorage;
 use OCA\Screenings\Media\Mp4Probe;
+use OCA\Screenings\Service\QuestionService;
 use OCA\Screenings\Service\SubtitleService;
 use OCA\Screenings\Tracking\TrackingService;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -42,6 +43,7 @@ class StreamService {
 		private MediaService $media,
 		private Mp4Probe $mp4Probe,
 		private SubtitleService $subtitles,
+		private QuestionService $questions,
 		private ViewerSessionMapper $sessions,
 		private TrackingService $tracking,
 		private IURLGenerator $urlGenerator,
@@ -82,6 +84,10 @@ class StreamService {
 			'notesUrl' => $ctx->invite->mayLeaveNotes()
 				? $this->urlGenerator->linkToRoute(Application::APP_ID . '.feedback.notes', ['sessionId' => $sid])
 				: null,
+			// Closing questions: {url, count, answered, pending}, or null.
+			'questions' => ($questions = $this->questions->viewerState($ctx)) === null ? null : $questions + [
+				'url' => $this->urlGenerator->linkToRoute(Application::APP_ID . '.feedback.questions', ['sessionId' => $sid]),
+			],
 			'heartbeatSeconds' => self::HEARTBEAT_SECONDS,
 			'tokenHeader' => StreamGuard::TOKEN_HEADER,
 			'subtitles' => $subtitles,

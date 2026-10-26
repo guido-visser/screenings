@@ -23,7 +23,24 @@
 				:playback="playback"
 				:screening="screening"
 				:viewer="viewer"
-				:notes="notes" />
+				:notes="notes"
+				@ended="onEnded" />
+			<div v-if="questions" class="feedback-bar" :class="{ 'feedback-bar--prompt': prompt }">
+				<p v-if="prompt" class="feedback-bar__text">
+					{{ n('screenings', 'You watched to the end earlier. Would you answer a question from {owner}?', 'You watched to the end earlier. Would you answer {count} short questions from {owner}?', questions.count, { owner: screening.owner, count: questions.count }) }}
+				</p>
+				<p v-else class="feedback-bar__text">
+					{{ n('screenings', '{owner} has a question for you about the film.', '{owner} has {count} short questions for you about the film.', questions.count, { owner: screening.owner, count: questions.count }) }}
+				</p>
+				<button class="feedback-bar__button" @click="openQuestions">
+					{{ answered ? t('screenings', 'Change my answers') : t('screenings', 'Give feedback') }}
+				</button>
+			</div>
+			<QuestionsDialog v-if="questions"
+				ref="questionsDialog"
+				:url="questions.url"
+				:owner="screening.owner"
+				@answered="onAnswered" />
 			<NotesPanel v-if="notes" :notes="notes" :owner="screening.owner" @seek="seekFromNotes" />
 			<PrivacyNotice v-if="screening.trackingNotice" :text="screening.trackingNotice" />
 		</section>
@@ -32,12 +49,13 @@
 
 <script setup>
 import { loadState } from '@nextcloud/initial-state'
-import { t } from '@nextcloud/l10n'
+import { n, t } from '@nextcloud/l10n'
 import { computed, defineAsyncComponent, ref } from 'vue'
 import EmailGate from './components/EmailGate.vue'
 import NotesPanel from './components/NotesPanel.vue'
 import PasswordForm from './components/PasswordForm.vue'
 import PrivacyNotice from './components/PrivacyNotice.vue'
+import QuestionsDialog from './components/QuestionsDialog.vue'
 import ScreeningHeader from './components/ScreeningHeader.vue'
 import { createNotes } from './notes.js'
 
@@ -49,6 +67,32 @@ const { state, token, screening, viewer, playback } = loadState('screenings', 'v
 const player = ref(null)
 // Only for invites the owner asked for notes.
 const notes = playback?.notesUrl ? createNotes(playback.notesUrl) : null
+
+// Closing questions ({url, count, pending}) for invites the owner asks.
+const questions = playback?.questions ?? null
+const questionsDialog = ref(null)
+// Finished the film on an earlier visit without answering: ask once, softly.
+const prompt = ref(Boolean(questions?.pending))
+const answered = ref(Boolean(questions?.answered))
+let askedAtEnd = false
+
+function openQuestions() {
+	prompt.value = false
+	questionsDialog.value?.open()
+}
+
+/** The film reached its end: ask the questions, once per visit. */
+function onEnded() {
+	if (questions && !answered.value && !askedAtEnd) {
+		askedAtEnd = true
+		openQuestions()
+	}
+}
+
+function onAnswered() {
+	answered.value = true
+	prompt.value = false
+}
 
 /** A note's time in the list was clicked: bring the player into view there. */
 function seekFromNotes(position) {

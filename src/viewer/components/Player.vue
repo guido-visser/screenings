@@ -209,6 +209,7 @@ const props = defineProps({
 	/** The viewer's notes (see notes.js), or null. */
 	notes: { type: Object, default: null },
 })
+const emit = defineEmits(['ended'])
 
 const container = ref(null)
 const video = ref(null)
@@ -622,6 +623,7 @@ function onEnded() {
 	playing.value = false
 	ranges.close()
 	tracker.track('ended', position())
+	emit('ended')
 }
 
 function onWaiting() {

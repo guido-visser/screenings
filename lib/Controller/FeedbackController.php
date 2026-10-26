@@ -9,6 +9,7 @@ use OCA\Screenings\AppInfo\Application;
 use OCA\Screenings\Exception\NotFoundException;
 use OCA\Screenings\Exception\ValidationException;
 use OCA\Screenings\Service\FeedbackService;
+use OCA\Screenings\Service\QuestionService;
 use OCA\Screenings\Stream\StreamContext;
 use OCA\Screenings\Stream\StreamDenied;
 use OCA\Screenings\Stream\StreamGuard;
@@ -21,7 +22,8 @@ use OCP\AppFramework\Http\JSONResponse;
 use OCP\IRequest;
 
 /**
- * The viewer's own notes, for an open viewer session.
+ * The viewer's own notes and answers to closing questions, for an open
+ * viewer session.
  *
  * Like the heartbeat, these routes rely on the SameSite=Strict session
  * cookie instead of the CSRF token: other sites can't send it.
@@ -31,6 +33,7 @@ class FeedbackController extends Controller {
 		IRequest $request,
 		private StreamGuard $guard,
 		private FeedbackService $feedback,
+		private QuestionService $questionService,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -66,6 +69,27 @@ class FeedbackController extends Controller {
 			$this->feedback->deleteNote($ctx, $noteId);
 			return [];
 		});
+	}
+
+	/**
+	 * The closing questions with this viewer's answers so far.
+	 */
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/stream/{sessionId}/questions', requirements: ['sessionId' => '\d+'])]
+	public function questions(int $sessionId): JSONResponse {
+		return $this->handle($sessionId, fn (StreamContext $ctx) => $this->questionService->viewerQuestions($ctx));
+	}
+
+	/**
+	 * All answers at once: {answers: {questionId: value}}.
+	 */
+	#[PublicPage]
+	#[NoCSRFRequired]
+	#[FrontpageRoute(verb: 'PUT', url: '/stream/{sessionId}/answers', requirements: ['sessionId' => '\d+'])]
+	public function answers(int $sessionId): JSONResponse {
+		$body = $this->body();
+		return $this->handle($sessionId, fn (StreamContext $ctx) => $this->questionService->saveAnswers($ctx, $body['answers'] ?? null));
 	}
 
 	private function body(): array {

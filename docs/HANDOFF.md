@@ -1,6 +1,6 @@
 # Handoff: Screenings (Nextcloud app)
 
-**State on 2026-10-26:** version **0.4.0** in `main` (viewer notes and the owner's review page: phases 1 and 2 of the feedback feature). **Not deployed**: production runs 0.3.12. `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
+**State on 2026-10-26:** version **0.4.1** in `main` (the feedback feature, all three phases: viewer notes, the owner's review page, closing questions). **Not deployed**: production runs 0.3.12. `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
 
 **Start here:** read the project skill `.claude/skills/screenings-dev/SKILL.md` before building, testing or deploying. It has the commands, the deploy script, the production quirks and the Windows/Docker pitfalls that cost a lot of time when rediscovered. User-facing behaviour is documented in the [README](../README.md); the original 8-phase plan is in [PLAN.md](PLAN.md) (done, partly superseded).
 
@@ -13,13 +13,12 @@ A Nextcloud app for sending tracked private screenings of a film.
 - **Video:** *Auto* (default) streams browser-ready MP4/MOV directly and converts everything else with ffmpeg (repackage, audio only, or full H.264 in 1080/720/480p). Also *Direct MP4*, *Pre-packaged HLS* and *Server transcode*. All HLS is encrypted by the app.
 - **Subtitles:** uploaded by hand, or picked up from files next to the video (`film.en.srt`, `film.nl.forced.srt`, …), automatically on create, on a video change, and whenever such a file is added, changed, copied or renamed.
 - **Invitation email:** HTML the owner designs in the portal (a default plus optional per-screening designs), with `{{placeholders}}`, sections, live preview and test sends.
-- **Feedback:** per invite (never for open-link visitors) the owner can ask for **notes**: the viewer pauses with N or a button and writes a thought stamped with the moment. Notes show as seek-bar markers and in a "My notes" list under the player (jump, edit, delete). The owner reviews them in the **Notes** tab: their own player with colour-coded markers, a note card over the video, a list that follows the film, CSV/SRT export, and a bundled Nextcloud notification.
+- **Feedback:** per invite (never for open-link visitors) the owner can ask for **notes**: the viewer pauses with N or a button and writes a thought stamped with the moment. Notes show as seek-bar markers and in a "My notes" list under the player (jump, edit, delete). Closing questions per screening (rating, choice, text) are asked at the end of the film or via "Give feedback", for invites with questions on. The owner reviews everything in the **Feedback** tab (Notes | Answers): for notes, their own player with colour-coded markers, a note card over the video, a list that follows the film, CSV/SRT export, and a bundled Nextcloud notification.
 - **Privacy:** an optional, editable tracking notice per screening; data retention per screening (daily job); everything is deleted with its invite, screening or owner.
 
 ## Open items, in order
 
-0. **Feedback feature, phase 3** (plan agreed with Guido on 2026-10-26; phases 1 and 2, notes and the review page, are done). Small leftovers from phase 2: the Notes tab has no count badge (the dashboard tile shows the count), and a note notification stays after its invite is deleted (its link still opens the Notes tab).
-   - **Phase 3: closing questions.** Per screening, questions of kind rating 1–5, free text or choice, with a "required" flag, edited in Settings. `scr_invites.ask_questions` already exists (`Invite::mayAnswerQuestions()`). The viewer gets a dialog at the end (or a "Give feedback" button), with answers changeable later (`scr_questions`, `scr_answers` unique per invite+question). The owner tab becomes **Feedback** (Notes | Answers) with averages, counts and free text. Answers go into the CSV export and the notification.
+0. **Feedback feature: done** (all three phases, 2026-10-26). Small leftovers: the Feedback tab has no count badge (the dashboard tiles show the counts), and notifications stay after their invite is deleted (their links still open the tab). Not tested here: real fullscreen with the note card or the questions dialog, and deleting a whole screening with questions (same cleanup code path as notes).
 1. **Guido still has to confirm on his server** (none of these can be fully tested from here):
    - **Fullscreen controls** on Chrome 156/Windows (2560×1440). He reported them missing; they work in headless Chrome (`scripts/fullscreen-check.py`). Hardening shipped in 0.3.6: controls show on entering, stay while hovered, wake on any pointer. If still broken, ask whether moving the mouse brings them back.
    - **A real conversion** (e.g. ProRes or MKV) with the server's ffmpeg 4.2. That version supports every option the app uses (checked), but no full conversion has run there yet.
@@ -35,15 +34,15 @@ lib/
   AppInfo/Application.php        listeners (Files scripts, user deleted, subtitle file events); MaxMind-only autoloader
   Controller/
     PageController               portal page (initial state: deliveryModes)
-    ApiController                owner API: screenings, subtitles (+ import from the video's folder), invites, by-source, media/reprocess
+    ApiController                owner API: screenings, subtitles (+ import from the video's folder), invites (+ feedback switches), questions, by-source, media/reprocess
     MailTemplateController       /api/mail-template (GET/PUT/DELETE, /preview, /test)
-    DashboardController          /api/screenings/{id}/dashboard|live|notes|notes.csv|notes.srt, /api/invites/{id}/activity, DELETE /api/notes/{id}
+    DashboardController          /api/screenings/{id}/dashboard|live|notes|notes.csv|notes.srt|answers|answers.csv, /api/invites/{id}/activity, DELETE /api/notes/{id}
     AdminController              admin-only settings, GeoIP download
     PublicController             /s/{token}: states unavailable|revoked|expired|email|password|not_ready|ready; password; code; verify
     StreamController             /stream/{sid}/(master.m3u8|vN.m3u8|vN_NNNNN.ts|screenings-key|video.mp4|subtitles/{id}.vtt|heartbeat|events)
-    FeedbackController           /stream/{sid}/notes (GET/POST), /notes/{id} (PUT/DELETE): the viewer's own notes, cookie-authorized like the heartbeat
+    FeedbackController           /stream/{sid}/notes (GET/POST), /notes/{id} (PUT/DELETE), /questions (GET), /answers (PUT): the viewer's own notes and answers, cookie-authorized like the heartbeat
     PreviewController            /api/screenings/{id}/preview (config) + /preview/(HLS files|video.mp4|subtitles/{id}.vtt): the owner's own player, login + ownership, no tracking/window/budget
-  Db/                            Screening, Subtitle, Invite (allow_notes, ask_questions), Otp, ViewerSession, MailTemplate, Note + mappers (QBMapper has no generic find())
+  Db/                            Screening, Subtitle, Invite (allow_notes, ask_questions), Otp, ViewerSession, MailTemplate, Note, Question, Answer + mappers (QBMapper has no generic find())
   Media/                         Mp4Probe (index, codecs, H.264 profile), HlsPlaylist, HlsPackager (all encryption), Transcoder (plan(): remux|audio|full),
                                  Ffmpeg (detection, also under open_basedir), ProcessRunner, MediaProcessor (token-guarded runs), MediaService (prepare/prepareAuto), MediaStorage
   Stream/                        StreamGuard, PlaybackToken, PlaybackBudget (90 s window; per-invite bucket of 180 s, refilled at 3x), StreamService (incl. indexReadEnd), RangeResponse
@@ -55,7 +54,7 @@ lib/
   BackgroundJob/                 ProcessMediaJob (queued), GeoIpUpdateJob (weekly), RetentionJob (daily)
   Listener/                      LoadFilesScripts, UserDeleted (deletes the owner's screenings and designs), SubtitleFile (file events)
   Command/ProcessMedia           occ screenings:process-media <id> [--force]
-  Migration/                     1000 all tables · 1001 media_token/warning · 1002 tracking notice · 1003 media_mode · 1004 subtitle source_file_id · 1005 mail templates · 1006 notes + invite feedback switches
+  Migration/                     1000 all tables · 1001 media_token/warning · 1002 tracking notice · 1003 media_mode · 1004 subtitle source_file_id · 1005 mail templates · 1006 notes + invite feedback switches · 1007 questions + answers
 src/
   portal/                        App.vue (hash router: router.js; #/email = default design), components/ScreeningView (tabs: Dashboard, Settings, Invitation email),
                                  DashboardView, ViewerDetail, Heatmap, InvitesSection, SubtitlesSection, MediaStatus, MailTemplateEditor, HlsHelp
@@ -63,7 +62,7 @@ src/
   files/main.js                  Files app action "Create / Go to screening" (videos → Auto, .m3u8 → HLS)
   admin/                         AdminSettings.vue, GeoIpSettings.vue
 build/package.sh                 release tarball (runtime files only)
-tests/Unit/                      98 tests: feedback (note text, position, open-link rule, CSV/SRT export), converter, probe, playlists, tokens, budget, index reads, ranges, UA, heatmap, subtitle names, templates, ffmpeg input formats (these need ffmpeg: run them in the nextcloud container)
+tests/Unit/                      104 tests: feedback (note text, position, open-link rule, CSV/SRT export), questions (validation, answers, summaries, CSV), converter, probe, playlists, tokens, budget, index reads, ranges, UA, heatmap, subtitle names, templates, ffmpeg input formats (these need ffmpeg: run them in the nextcloud container)
 ```
 
 ## Decisions that aren't obvious from the code
@@ -78,6 +77,7 @@ tests/Unit/                      98 tests: feedback (note text, position, open-l
 - **Email designs:** placeholder values are always escaped (`{{x}}`, no raw form); scripts and event handlers are stripped; `{{link}}` is required. The preview iframe is `sandbox=""`.
 - **Notes:** the `note_added` event only keeps the note id; the dashboard adds the current text when listing events, so an edited or deleted note leaves no copy in the tracking log. Notes aren't covered by the retention job (the viewer gave them on purpose) but are deleted with their invite, screening or owner (`TrackingCleanupService`). The viewer only gets `notesUrl` in its player config when `Invite::mayLeaveNotes()`; every route checks it again and returns 404 otherwise or for another invite's note.
 - **Owner preview:** `StreamService` has one core per media type (`hlsContent`, `mp4Content`, `previewSubtitle`) with an optional `StreamContext`: a viewer's context applies the playhead window and budget, null (the owner) skips them. Viewer behaviour is unchanged (`leaktest.sh` still refuses at 92 s). The preview routes are GET with `NoCSRFRequired`, because hls.js and `<video>` fetch them directly; the login cookie and ownership (404 otherwise) authorize them.
+- **Questions:** saving the editor replaces the whole list; questions keep their id (and answers) while they exist, and lose their answers when deleted or when their kind changes. Answers are saved as a whole form and stored as text (rating "4", the option for a choice); an empty optional answer deletes the row. The player config carries `questions: {url, count, answered, pending}` only for invites with questions on and a screening that has questions; `pending` (finished earlier, never answered: an "ended" event and no answers) shows a reminder bar. The dialog is a modal `<dialog>` outside the player: the top layer also shows it over a fullscreen player. Public-page CSS centres form legends with an id selector (`#body-public form fieldset legend`), hence the id in viewer.css.
 - **Note notifications:** `FeedbackService::notifyOwner` marks the session's earlier notification processed and sends a new one with the session's note count. A failure there is logged and never fails saving the note. `INotification::setDateTime` needs a mutable `DateTime`.
 - **GeoIP:** the downloaded database lives in `<datadirectory>/screenings-geoip/`, because the reader needs a local file path.
 
@@ -116,7 +116,8 @@ Still open from that review (low risk on a server with few trusted accounts):
 | 2a7c435 | 0.3.12: less tracking: no window focus events; tab switches only while the film plays |
 | 64c54ac | Package build on Docker's own disk with a lockfile-keyed npm ci: deploy ~8 min → ~30 s, identical package |
 | 03d6f89 | 0.4.0: viewer notes (feedback phase 1): per-invite switch, note box in the player (N), markers, "My notes" list, notes in the owner's viewer timeline |
-| (this commit) | Feedback phase 2: Notes tab with the owner's preview player, colour-coded markers, note card, following list, CSV/SRT export, dashboard tile, bundled notifications |
+| 5440f09 | Feedback phase 2: Notes tab with the owner's preview player, colour-coded markers, note card, following list, CSV/SRT export, dashboard tile, bundled notifications |
+| (this commit) | 0.4.1: feedback phase 3: closing questions (editor, per-invite switch, dialog at the end and "Give feedback", reminder, Feedback → Answers with summaries and CSV, notification) |
 
 ## Production (details outside the repo)
 
@@ -149,8 +150,8 @@ Admin login: see `dev/.env` (user `admin`, email `admin@example.test`). Mailpit:
 | MP4 Leak | 16 | `T8i1fryhAcV903cATftOzmQfNJimA2pW` |
 | Moov Tester | 18 | `vmo2oh1c9wcOeVrgKExWN2OJH2iC2QBl` |
 | Subtitle Tester | 29 | `eZuvoZN5Y6Sw8DoRgDyIh9R63HzE5t5l` |
-| Auto 19 (notes on; notes at 0:03, 2:05) | 19 | `cGhz56wMdKFcD3aBA6Yw06C9w1y1Hk7C` |
-| Reviewer B (notes on; 4 notes incl. 0:04, 0:06 near Auto 19's) | 19 | `DazLnT51U8sW9wkXjqSeR4FV5YuN7KF1` |
+| Auto 19 (notes and questions on; notes at 0:03, 2:05; answered) | 19 | `cGhz56wMdKFcD3aBA6Yw06C9w1y1Hk7C` |
+| Reviewer B (notes and questions on; 4 notes incl. 0:04, 0:06; answered) | 19 | `DazLnT51U8sW9wkXjqSeR4FV5YuN7KF1` |
 
 Test files are in the admin's Files under `/Films`: test-clip.mp4, slow-start.mp4, hevc.mp4, broken.mp4, long-1080p.mp4 (224 MB), ten-minutes.mp4 (+ `ten-minutes.*.srt`), moov-at-end.mp4, `auto-tests/`, `autosub/`, `Rough cut HLS/`, `Multi HLS/`.
 

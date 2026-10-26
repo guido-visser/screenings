@@ -15,6 +15,18 @@
 					</template>
 					{{ t('screenings', 'Turn notes off for everyone') }}
 				</NcActionButton>
+				<NcActionButton close-after-click @click="setAllQuestions(true)">
+					<template #icon>
+						<NcIconSvgWrapper :path="mdiCommentQuestionOutline" />
+					</template>
+					{{ t('screenings', 'Ask everyone the closing questions') }}
+				</NcActionButton>
+				<NcActionButton close-after-click @click="setAllQuestions(false)">
+					<template #icon>
+						<NcIconSvgWrapper :path="mdiCommentRemoveOutline" />
+					</template>
+					{{ t('screenings', 'Turn questions off for everyone') }}
+				</NcActionButton>
 			</NcActions>
 		</div>
 
@@ -25,6 +37,9 @@
 			</div>
 			<NcCheckboxRadioSwitch v-model="allowNotes">
 				{{ t('screenings', 'Let them leave notes at moments in the film') }}
+			</NcCheckboxRadioSwitch>
+			<NcCheckboxRadioSwitch v-model="askQuestions">
+				{{ t('screenings', 'Ask them the closing questions') }}
 			</NcCheckboxRadioSwitch>
 			<NcCheckboxRadioSwitch v-model="sendEmail">
 				{{ t('screenings', 'Email the invitation now') }}
@@ -63,6 +78,9 @@
 				<span v-if="invite.allowNotes" class="invites__badge" :title="t('screenings', 'Can leave notes')">
 					{{ t('screenings', 'Notes') }}
 				</span>
+				<span v-if="invite.askQuestions" class="invites__badge" :title="t('screenings', 'Gets the closing questions')">
+					{{ t('screenings', 'Questions') }}
+				</span>
 				<span v-if="invite.revokedAt" class="invites__badge invites__badge--error">
 					{{ t('screenings', 'Revoked') }}
 				</span>
@@ -82,6 +100,11 @@
 						:model-value="invite.allowNotes"
 						@update:model-value="setNotes(invite, $event)">
 						{{ t('screenings', 'Can leave notes') }}
+					</NcActionCheckbox>
+					<NcActionCheckbox v-if="invite.source !== 'open_link'"
+						:model-value="invite.askQuestions"
+						@update:model-value="setQuestions(invite, $event)">
+						{{ t('screenings', 'Gets the closing questions') }}
 					</NcActionCheckbox>
 					<NcActionButton close-after-click @click="setRevoked(invite, !invite.revokedAt)">
 						<template #icon>
@@ -108,6 +131,8 @@
 import {
 	mdiAccountPlusOutline,
 	mdiCommentOffOutline,
+	mdiCommentQuestionOutline,
+	mdiCommentRemoveOutline,
 	mdiCommentTextOutline,
 	mdiContentCopy,
 	mdiDeleteOutline,
@@ -144,6 +169,7 @@ const sendEmail = ref(true)
 const message = ref('')
 const adding = ref(false)
 const allowNotes = ref(false)
+const askQuestions = ref(false)
 
 // Open-link visitors never give feedback.
 const personalInvites = computed(() => items.value.filter((i) => i.source !== 'open_link'))
@@ -163,7 +189,7 @@ function statusText(invite) {
 async function add() {
 	adding.value = true
 	try {
-		const invite = await api.createInvite(props.screeningId, name.value, email.value, sendEmail.value, message.value, { allowNotes: allowNotes.value })
+		const invite = await api.createInvite(props.screeningId, name.value, email.value, sendEmail.value, message.value, { allowNotes: allowNotes.value, askQuestions: askQuestions.value })
 		items.value.unshift(invite)
 		if (invite.mailError) {
 			showError(t('screenings', 'The invite was added, but the email failed: {error}', { error: invite.mailError }))
@@ -190,24 +216,29 @@ async function send(invite) {
 	}
 }
 
-async function setNotes(invite, allowed) {
+async function setFeedback(invite, feedback) {
 	try {
-		const saved = await api.setInviteFeedback(invite.id, { allowNotes: allowed })
+		const saved = await api.setInviteFeedback(invite.id, feedback)
 		items.value = items.value.map((i) => i.id === saved.id ? saved : i)
 	} catch (error) {
-		showError(errorMessage(error, t('screenings', 'Could not change the notes setting')))
+		showError(errorMessage(error, t('screenings', 'Could not change the feedback setting')))
 	}
 }
 
-async function setAllNotes(allowed) {
+async function setAllFeedback(feedback) {
 	try {
-		const saved = await api.setAllInvitesFeedback(props.screeningId, { allowNotes: allowed })
+		const saved = await api.setAllInvitesFeedback(props.screeningId, feedback)
 		const byId = new Map(saved.map((i) => [i.id, i]))
 		items.value = items.value.map((i) => byId.get(i.id) ?? i)
 	} catch (error) {
-		showError(errorMessage(error, t('screenings', 'Could not change the notes setting')))
+		showError(errorMessage(error, t('screenings', 'Could not change the feedback setting')))
 	}
 }
+
+const setNotes = (invite, allowed) => setFeedback(invite, { allowNotes: allowed })
+const setQuestions = (invite, asked) => setFeedback(invite, { askQuestions: asked })
+const setAllNotes = (allowed) => setAllFeedback({ allowNotes: allowed })
+const setAllQuestions = (asked) => setAllFeedback({ askQuestions: asked })
 
 async function setRevoked(invite, revoked) {
 	try {

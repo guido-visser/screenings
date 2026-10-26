@@ -10,6 +10,7 @@ use OCA\Screenings\Db\Invite;
 use OCA\Screenings\Exception\NotFoundException;
 use OCA\Screenings\Exception\ValidationException;
 use OCA\Screenings\Service\InviteService;
+use OCA\Screenings\Service\QuestionService;
 use OCA\Screenings\Service\ScreeningService;
 use OCA\Screenings\Service\SubtitleImporter;
 use OCA\Screenings\Service\SubtitleService;
@@ -37,6 +38,7 @@ class ApiController extends Controller {
 		private SubtitleService $subtitles,
 		private SubtitleImporter $subtitleImporter,
 		private InviteService $invites,
+		private QuestionService $questionService,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -220,6 +222,27 @@ class ApiController extends Controller {
 	/**
 	 * @throws NotFoundException
 	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/screenings/{id}/questions', requirements: ['id' => '\d+'])]
+	public function questions(int $id): JSONResponse {
+		return $this->handle(function () use ($id) {
+			$this->screenings->get($id, $this->uid());
+			return $this->questionService->listForScreening($id);
+		});
+	}
+
+	/**
+	 * Replaces the closing questions: {questions: [{id?, kind, label, options?, required?}]}.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'PUT', url: '/api/screenings/{id}/questions', requirements: ['id' => '\d+'])]
+	public function saveQuestions(int $id): JSONResponse {
+		return $this->handle(function () use ($id) {
+			$this->screenings->get($id, $this->uid());
+			return $this->questionService->save($id, $this->body()['questions'] ?? null);
+		});
+	}
+
 	/**
 	 * Notes and closing questions for one invite: {allowNotes?, askQuestions?}.
 	 */

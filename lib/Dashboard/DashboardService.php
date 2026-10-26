@@ -78,6 +78,8 @@ class DashboardService {
 				'totalWatchedSeconds' => round(array_sum(array_column($viewers, 'watchedSeconds')), 1),
 				'notes' => array_sum($this->notes->countByInvite($screening->getId())),
 				'notesAsked' => count(array_filter($invites, fn (Invite $i) => $i->mayLeaveNotes())),
+				'answered' => $this->countAnswered($screening->getId()),
+				'questionsAsked' => count(array_filter($invites, fn (Invite $i) => $i->mayAnswerQuestions())),
 			],
 			'heatmap' => [
 				'bucketSeconds' => Heatmap::bucketSeconds($durationS),
@@ -296,6 +298,20 @@ class DashboardService {
 		}
 		$result->closeCursor();
 		return array_values($visitors);
+	}
+
+	/**
+	 * How many viewers answered the closing questions.
+	 */
+	private function countAnswered(int $screeningId): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select($qb->func()->count($qb->createFunction('DISTINCT invite_id'), 'viewers'))
+			->from('scr_answers')
+			->where($qb->expr()->eq('screening_id', $qb->createNamedParameter($screeningId, IQueryBuilder::PARAM_INT)));
+		$result = $qb->executeQuery();
+		$count = (int)$result->fetchOne();
+		$result->closeCursor();
+		return $count;
 	}
 
 	private function events(int $inviteId, ?int $beforeId): array {

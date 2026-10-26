@@ -28,7 +28,22 @@
 
 			<DashboardView v-if="view === 'dashboard'" :screening="screening" />
 			<MailTemplateEditor v-else-if="view === 'email'" :screening-id="screening.id" />
-			<NotesReview v-else-if="view === 'notes'" :screening="screening" :note-id="noteId" />
+			<template v-else-if="view === 'notes' || view === 'answers'">
+				<nav class="screening__subnav" :aria-label="t('screenings', 'Feedback')">
+					<a :href="screeningHash(screening.id, 'notes')"
+						class="screening__subtab"
+						:aria-current="view === 'notes' ? 'page' : undefined">
+						{{ t('screenings', 'Notes') }}
+					</a>
+					<a :href="screeningHash(screening.id, 'answers')"
+						class="screening__subtab"
+						:aria-current="view === 'answers' ? 'page' : undefined">
+						{{ t('screenings', 'Answers') }}
+					</a>
+				</nav>
+				<NotesReview v-if="view === 'notes'" :screening="screening" :note-id="noteId" />
+				<AnswersView v-else :screening="screening" />
+			</template>
 			<ViewerDetail v-else-if="view === 'viewer'"
 				:key="inviteId"
 				:screening="screening"
@@ -137,6 +152,7 @@
 			</form>
 
 			<SubtitlesSection :screening-id="screening.id" :subtitles="screening.subtitles" :has-source="screening.sourceFileId !== null" />
+			<QuestionsSection :screening-id="screening.id" />
 			<InvitesSection :screening-id="screening.id"
 				:invites="screening.invites"
 				:has-password="screening.hasPassword"
@@ -167,16 +183,18 @@ import { copyLink } from '../clipboard.js'
 import HlsHelp from './HlsHelp.vue'
 import InvitesSection from './InvitesSection.vue'
 import { screeningHash } from '../router.js'
+import AnswersView from './AnswersView.vue'
 import DashboardView from './DashboardView.vue'
 import MailTemplateEditor from './MailTemplateEditor.vue'
 import MediaStatus from './MediaStatus.vue'
 import NotesReview from './NotesReview.vue'
+import QuestionsSection from './QuestionsSection.vue'
 import SubtitlesSection from './SubtitlesSection.vue'
 import ViewerDetail from './ViewerDetail.vue'
 
 const props = defineProps({
 	screeningId: { type: Number, required: true },
-	/** "dashboard", "settings", "email", "notes" or "viewer" */
+	/** "dashboard", "settings", "email", "notes", "answers" or "viewer" */
 	view: { type: String, default: 'dashboard' },
 	inviteId: { type: Number, default: null },
 	/** For "notes": open at this note. */
@@ -229,7 +247,7 @@ function videoFilter(mode) {
 const tabs = computed(() => [
 	// A viewer's activity belongs to the dashboard.
 	{ view: 'dashboard', label: t('screenings', 'Dashboard'), active: props.view === 'dashboard' || props.view === 'viewer' },
-	{ view: 'notes', label: t('screenings', 'Notes'), active: props.view === 'notes' },
+	{ view: 'notes', label: t('screenings', 'Feedback'), active: props.view === 'notes' || props.view === 'answers' },
 	{ view: 'settings', label: t('screenings', 'Settings'), active: props.view === 'settings' },
 	{ view: 'email', label: t('screenings', 'Invitation email'), active: props.view === 'email' },
 ])
@@ -466,6 +484,30 @@ onMounted(load)
 	border-radius: var(--border-radius-element, 8px);
 	color: var(--color-main-text);
 	font-weight: 500;
+}
+
+.screening__subnav {
+	display: flex;
+	gap: 4px;
+	margin: 0 0 12px;
+	border-bottom: 1px solid var(--color-border);
+}
+
+.screening__subtab {
+	padding: 6px 12px;
+	margin-bottom: -1px;
+	color: var(--color-text-maxcontrast);
+	border-bottom: 2px solid transparent;
+}
+
+.screening__subtab:hover {
+	color: var(--color-main-text);
+}
+
+.screening__subtab[aria-current="page"] {
+	color: var(--color-main-text);
+	border-bottom-color: var(--color-primary-element);
+	font-weight: 600;
 }
 
 .screening__tab:hover {

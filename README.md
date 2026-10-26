@@ -107,9 +107,17 @@ Per invite you can ask a viewer for **notes**: thoughts tied to a moment in the 
 
 The viewer then sees a note button in the player (or presses **N**). The film pauses and a box opens with the time already filled in. **Enter** saves, Shift+Enter starts a new line, Esc cancels, and the film carries on where it was. The box sits inside the player, so it also works in full screen. Their notes show as markers on the seek bar and in a "My notes" list under the player, where they can jump to a note, edit it or delete it.
 
-**Reviewing notes:** the screening's **Notes** tab plays the film with every viewer's notes as markers on its timeline, one colour per viewer. Markers that are close together become a numbered bubble that opens a list. Hover a marker to see who wrote what. Click a marker, or a note in the list next to the video, to jump there: the note appears over the video, also in full screen. Choose **Stay paused** or **Play from note** for what happens after a jump; the choice is remembered in your browser. While the film plays, the list follows along. Filter by viewer, delete notes, copy a link to one note, and download everything as a spreadsheet (CSV) or as subtitles (SRT) to load into your editing timeline, one 4-second cue per note. Watching here isn't tracked and has no speed limit: it's your own film.
+**Reviewing notes:** the screening's **Feedback** tab (Notes) plays the film with every viewer's notes as markers on its timeline, one colour per viewer. Markers that are close together become a numbered bubble that opens a list. Hover a marker to see who wrote what. Click a marker, or a note in the list next to the video, to jump there: the note appears over the video, also in full screen. Choose **Stay paused** or **Play from note** for what happens after a jump; the choice is remembered in your browser. While the film plays, the list follows along. Filter by viewer, delete notes, copy a link to one note, and download everything as a spreadsheet (CSV) or as subtitles (SRT) to load into your editing timeline, one 4-second cue per note. Watching here isn't tracked and has no speed limit: it's your own film.
 
 You get a Nextcloud notification when a viewer leaves notes: one per viewing session, updated with the count ("Anna left 4 notes on …"). Each note also appears in the viewer's activity timeline (filter **Notes**), always with its current text. Notes are kept until the invite or screening is deleted: the retention period doesn't apply to them, because the viewer gave them to you on purpose. A viewer can leave at most 60 notes per hour.
+
+## Closing questions
+
+Under **Settings → Closing questions** you can ask up to 10 questions per screening: a **rating** (1–5 stars), **multiple choice** or **free text**, each optionally required. Like notes, they go only to invites with **Questions** turned on (when adding the invite, in its menu, or for everyone from the menu next to the Invites heading), never to open-link visitors.
+
+The viewer gets the questions in a dialog when the film reaches its end, and any time from a **Give feedback** button under the player. Someone who watched to the end on an earlier visit without answering sees a short reminder above the player. Answers can be changed later ("Change my answers").
+
+You see the answers under **Feedback → Answers**: the average and spread of each rating, counts per option, every free-text answer, and a table per viewer. Download them as a spreadsheet (CSV). You get one notification per viewer when they answer or change their answers, and the dashboard shows how many of the asked viewers answered. Deleting a question, or changing its kind, deletes its answers (the editor warns you). Answers are kept like notes: until the invite or screening is deleted.
 
 ## How playback is protected
 
@@ -127,7 +135,7 @@ Revoking an invite or reaching the expiry date stops playback within one heartbe
 ## Data retention and privacy
 
 - Each screening has a **retention period** (Settings, default 365 days). A daily background job deletes viewer sessions, watched ranges and events older than that; a session counts from its last heartbeat. Invites stay, so the guest list is kept. Expired email codes are deleted by the same job.
-- Viewer notes are not subject to the retention period; they are deleted with their invite or screening.
+- Viewer notes and answers are not subject to the retention period; they are deleted with their invite or screening.
 - Deleting an invite or a screening deletes its tracking data immediately, and deleting a screening also deletes its encrypted media copy.
 - Deleting a Nextcloud user deletes all of their screenings, with invites, tracking data and media.
 

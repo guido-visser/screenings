@@ -14,10 +14,13 @@ use OCP\Notification\UnknownNotificationException;
 /**
  * "Anna left 4 notes on Bloedtranen": one notification per viewer session,
  * replaced as more notes arrive (see FeedbackService::notifyOwner).
+ * "Anna answered your questions on Bloedtranen": one per invite.
  */
 class Notifier implements INotifier {
 	public const SUBJECT_NOTES = 'notes';
 	public const OBJECT_SESSION = 'viewer_session';
+	public const SUBJECT_ANSWERS = 'answers';
+	public const OBJECT_ANSWERS = 'invite_answers';
 
 	public function __construct(
 		private IFactory $l10nFactory,
@@ -34,19 +37,25 @@ class Notifier implements INotifier {
 	}
 
 	public function prepare(INotification $notification, string $languageCode): INotification {
-		if ($notification->getApp() !== Application::APP_ID || $notification->getSubject() !== self::SUBJECT_NOTES) {
+		$subject = $notification->getSubject();
+		if ($notification->getApp() !== Application::APP_ID || !in_array($subject, [self::SUBJECT_NOTES, self::SUBJECT_ANSWERS], true)) {
 			throw new UnknownNotificationException();
 		}
 		$l = $this->l10nFactory->get(Application::APP_ID, $languageCode);
 		$p = $notification->getSubjectParameters();
-		$count = (int)($p['count'] ?? 1);
-		$notification->setParsedSubject($l->n(
-			'%1$s left a note on %2$s',
-			'%1$s left %3$d notes on %2$s',
-			$count,
-			[(string)($p['viewer'] ?? ''), (string)($p['title'] ?? ''), $count],
-		));
-		$notification->setLink($this->urlGenerator->linkToRouteAbsolute(Application::APP_ID . '.page.index') . '#/screenings/' . (int)($p['screeningId'] ?? 0) . '/notes');
+		if ($subject === self::SUBJECT_NOTES) {
+			$count = (int)($p['count'] ?? 1);
+			$notification->setParsedSubject($l->n(
+				'%1$s left a note on %2$s',
+				'%1$s left %3$d notes on %2$s',
+				$count,
+				[(string)($p['viewer'] ?? ''), (string)($p['title'] ?? ''), $count],
+			));
+		} else {
+			$notification->setParsedSubject($l->t('%1$s answered your questions on %2$s', [(string)($p['viewer'] ?? ''), (string)($p['title'] ?? '')]));
+		}
+		$view = $subject === self::SUBJECT_NOTES ? 'notes' : 'answers';
+		$notification->setLink($this->urlGenerator->linkToRouteAbsolute(Application::APP_ID . '.page.index') . '#/screenings/' . (int)($p['screeningId'] ?? 0) . '/' . $view);
 		$notification->setIcon($this->urlGenerator->getAbsoluteURL($this->urlGenerator->imagePath(Application::APP_ID, 'app-dark.svg')));
 		return $notification;
 	}

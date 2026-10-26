@@ -32,6 +32,20 @@ export default {
 	notesExportUrl(screeningId, format) {
 		return url(`/screenings/${screeningId}/notes.${format}`)
 	},
+	async questions(screeningId) {
+		return (await axios.get(url(`/screenings/${screeningId}/questions`))).data
+	},
+	/** Replaces all closing questions; returns them as saved. */
+	async saveQuestions(screeningId, questions) {
+		return (await axios.put(url(`/screenings/${screeningId}/questions`), { questions })).data
+	},
+	/** { asked, questions: [{ ..., summary }], viewers: [{ inviteId, name, email, answeredAt, answers }] } */
+	async answers(screeningId) {
+		return (await axios.get(url(`/screenings/${screeningId}/answers`))).data
+	},
+	answersExportUrl(screeningId) {
+		return url(`/screenings/${screeningId}/answers.csv`)
+	},
 	async getScreening(id) {
 		return (await axios.get(url(`/screenings/${id}`))).data
 	},

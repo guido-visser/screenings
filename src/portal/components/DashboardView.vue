@@ -35,6 +35,12 @@
 					<span class="tile__label">{{ t('screenings', 'Notes') }}</span>
 					<span class="tile__value">{{ totals.notes }}</span>
 				</a>
+				<a v-if="totals.answered || totals.questionsAsked"
+					class="tile tile--link"
+					:href="screeningHash(screening.id, 'answers')">
+					<span class="tile__label">{{ t('screenings', 'Answered the questions') }}</span>
+					<span class="tile__value">{{ totals.answered }}<span class="tile__of"> / {{ totals.questionsAsked }}</span></span>
+				</a>
 			</section>
 
 			<section class="dashboard__section">
@@ -296,6 +302,12 @@ onBeforeUnmount(() => {
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
 	line-height: 1.2;
+}
+
+.tile__of {
+	color: var(--color-text-maxcontrast);
+	font-size: 0.6em;
+	font-weight: 500;
 }
 
 .tile__value--live {

@@ -5,6 +5,7 @@
  *   #/screenings/12/email        this screening's invitation email design
  *   #/screenings/12/notes        viewers' notes on the film (review page)
  *   #/screenings/12/notes/56     the same, opened at one note
+ *   #/screenings/12/answers      answers to the closing questions
  *   #/screenings/12/viewers/34   one viewer's activity
  *   #/email                      the owner's default invitation email design
  */
@@ -12,7 +13,7 @@ export function parseHash(hash = window.location.hash) {
 	if (/^#\/email\/?$/.test(hash)) {
 		return { screeningId: null, view: 'email', inviteId: null, noteId: null }
 	}
-	const match = hash.match(/^#\/screenings\/(\d+)(?:\/(settings|dashboard|email|notes)(?:\/(\d+))?|\/viewers\/(\d+))?/)
+	const match = hash.match(/^#\/screenings\/(\d+)(?:\/(settings|dashboard|email|notes|answers)(?:\/(\d+))?|\/viewers\/(\d+))?/)
 	if (!match) {
 		return { screeningId: null, view: null, inviteId: null, noteId: null }
 	}

@@ -9,6 +9,7 @@ use OCA\Screenings\Dashboard\DashboardService;
 use OCA\Screenings\Exception\NotFoundException;
 use OCA\Screenings\Service\FeedbackService;
 use OCA\Screenings\Service\InviteService;
+use OCA\Screenings\Service\QuestionService;
 use OCA\Screenings\Service\ScreeningService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -33,6 +34,7 @@ class DashboardController extends Controller {
 		private InviteService $invites,
 		private DashboardService $dashboard,
 		private FeedbackService $feedback,
+		private QuestionService $questions,
 	) {
 		parent::__construct(Application::APP_ID, $request);
 	}
@@ -114,6 +116,37 @@ class DashboardController extends Controller {
 			$csv ? FeedbackService::csv($data) : FeedbackService::srt($data),
 			self::fileName($screening->getTitle()) . ' - notes.' . $format,
 			$csv ? 'text/csv; charset=utf-8' : 'application/x-subrip; charset=utf-8',
+		);
+		$response->addHeader('Cache-Control', 'no-store, private');
+		return $response;
+	}
+
+	/**
+	 * Closing questions with a summary each, and every viewer's answers.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/screenings/{id}/answers', requirements: ['id' => '\d+'])]
+	public function answers(int $id): JSONResponse {
+		try {
+			return new JSONResponse($this->questions->ownerAnswers($this->screenings->get($id, $this->uid())));
+		} catch (NotFoundException $e) {
+			return new JSONResponse(['message' => $e->getMessage()], Http::STATUS_NOT_FOUND);
+		}
+	}
+
+	#[NoAdminRequired]
+	#[NoCSRFRequired]
+	#[FrontpageRoute(verb: 'GET', url: '/api/screenings/{id}/answers.csv', requirements: ['id' => '\d+'])]
+	public function exportAnswers(int $id): Response {
+		try {
+			$screening = $this->screenings->get($id, $this->uid());
+		} catch (NotFoundException $e) {
+			return new JSONResponse(['message' => $e->getMessage()], Http::STATUS_NOT_FOUND);
+		}
+		$response = new DataDownloadResponse(
+			QuestionService::csv($this->questions->ownerAnswers($screening)),
+			self::fileName($screening->getTitle()) . ' - answers.csv',
+			'text/csv; charset=utf-8',
 		);
 		$response->addHeader('Cache-Control', 'no-store, private');
 		return $response;

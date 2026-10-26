@@ -10,8 +10,9 @@ use OCP\IDBConnection;
 /**
  * Deletes viewer sessions, events, watched ranges and OTP codes when an
  * invite or a whole screening is deleted, or when they pass the screening's
- * retention period. Viewer notes go with the invite or screening, but not
- * with the retention period: the viewer gave them to the owner on purpose.
+ * retention period. Viewer notes and answers go with the invite or
+ * screening, but not with the retention period: the viewer gave them to the
+ * owner on purpose.
  */
 class TrackingCleanupService {
 	public function __construct(
@@ -34,6 +35,7 @@ class TrackingCleanupService {
 			$this->deleteIn('scr_events', 'invite_id', $chunk);
 			$this->deleteIn('scr_sessions', 'invite_id', $chunk);
 			$this->deleteIn('scr_notes', 'invite_id', $chunk);
+			$this->deleteIn('scr_answers', 'invite_id', $chunk);
 		}
 	}
 
@@ -43,6 +45,8 @@ class TrackingCleanupService {
 		$this->deleteEq('scr_events', 'screening_id', $screeningId);
 		$this->deleteEq('scr_otp', 'screening_id', $screeningId);
 		$this->deleteEq('scr_notes', 'screening_id', $screeningId);
+		$this->deleteEq('scr_answers', 'screening_id', $screeningId);
+		$this->deleteEq('scr_questions', 'screening_id', $screeningId);
 	}
 
 	/**

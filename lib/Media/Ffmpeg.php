@@ -17,6 +17,15 @@ class Ffmpeg {
 	public const CONFIG_FFPROBE_PATH = 'ffprobe_path';
 	/** Tried when PATH lookups find nothing, e.g. because of open_basedir. */
 	private const COMMON_DIRS = ['/usr/bin', '/usr/local/bin', '/opt/homebrew/bin', '/snap/bin'];
+	/**
+	 * Containers ffmpeg may open a source as (demuxer names). ffmpeg picks the
+	 * format from the file's contents, not its name, and some formats (hls,
+	 * concat, image2, …) read other files by path. A ".mp4" that is really a
+	 * playlist could then pull another user's files into a screening, which
+	 * older ffmpeg versions (4.2) don't refuse on their own. Only plain media
+	 * containers are allowed; their nested demuxers inherit the list.
+	 */
+	public const INPUT_FORMATS = ['mov', 'matroska', 'mxf', 'avi', 'mpegts', 'mpeg', 'asf', 'flv', 'ogg', 'dv'];
 
 	/** @var array<string, ?string> binary => path, per request */
 	private array $resolved = [];
@@ -56,8 +65,15 @@ class Ffmpeg {
 	 */
 	public function probe(string $localPath): array {
 		$ffprobe = $this->ffprobePath() ?? throw new MediaException('ffprobe was not found on the server');
-		$result = ProcessRunner::run([$ffprobe, '-v', 'error', '-print_format', 'json', '-show_streams', '-show_format', $localPath]);
+		$result = ProcessRunner::run(array_merge(
+			[$ffprobe, '-v', 'error'],
+			self::inputOptions(),
+			['-print_format', 'json', '-show_streams', '-show_format', $localPath],
+		));
 		$info = json_decode($result['stdout'], true);
+		if (str_contains($result['stderr'], 'not on whitelist')) {
+			throw new MediaException('This file is not a video container the server can convert (for example a playlist or a list of other files). Choose the video file itself.');
+		}
 		if ($result['exitCode'] !== 0 || !is_array($info)) {
 			throw new MediaException('ffprobe could not read the video: ' . self::lastLine($result['stderr']));
 		}
@@ -85,6 +101,16 @@ class Ffmpeg {
 			'hasAudio' => $audio !== null,
 			'audioCodec' => $audio['codec_name'] ?? null,
 		];
+	}
+
+	/**
+	 * Options that go before every "-i <source>": local files only, and only
+	 * the containers in INPUT_FORMATS.
+	 *
+	 * @return list<string>
+	 */
+	public static function inputOptions(): array {
+		return ['-protocol_whitelist', 'file', '-format_whitelist', implode(',', self::INPUT_FORMATS)];
 	}
 
 	public static function lastLine(string $output): string {

@@ -1,6 +1,6 @@
 # Handoff: Screenings (Nextcloud app)
 
-**State on 2026-10-26:** version **0.3.8**, live on Guido's own Nextcloud (NC 35.0.2). `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
+**State on 2026-10-26:** version **0.3.10** in `main`, not deployed yet (`deploy.sh --check` shows what runs on Guido's Nextcloud, NC 35.0.2). `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
 
 **Start here:** read the project skill `.claude/skills/screenings-dev/SKILL.md` before building, testing or deploying. It has the commands, the deploy script, the production quirks and the Windows/Docker pitfalls that cost a lot of time when rediscovered. User-facing behaviour is documented in the [README](../README.md); the original 8-phase plan is in [PLAN.md](PLAN.md) (done, partly superseded).
 
@@ -41,7 +41,7 @@ lib/
   Db/                            Screening, Subtitle, Invite, Otp, ViewerSession, MailTemplate + mappers (QBMapper has no generic find())
   Media/                         Mp4Probe (index, codecs, H.264 profile), HlsPlaylist, HlsPackager (all encryption), Transcoder (plan(): remux|audio|full),
                                  Ffmpeg (detection, also under open_basedir), ProcessRunner, MediaProcessor (token-guarded runs), MediaService (prepare/prepareAuto), MediaStorage
-  Stream/                        StreamGuard, PlaybackToken, PlaybackBudget (90 s window, 180 s + 3x budget), StreamService (incl. indexReadEnd), RangeResponse
+  Stream/                        StreamGuard, PlaybackToken, PlaybackBudget (90 s window; per-invite bucket of 180 s, refilled at 3x), StreamService (incl. indexReadEnd), RangeResponse
   Tracking/                      TrackingService, WatchRanges, UserAgentParser, GeoIpService, GeoIpUpdater
   Dashboard/                     DashboardService (incl. pendingVisitors), Heatmap
   Mail/                          TemplateRenderer (placeholders, sections, toText, clean), MailTemplateService (resolve: screening → default → built-in), default-invitation.html
@@ -58,7 +58,7 @@ src/
   files/main.js                  Files app action "Create / Go to screening" (videos → Auto, .m3u8 → HLS)
   admin/                         AdminSettings.vue, GeoIpSettings.vue
 build/package.sh                 release tarball (runtime files only)
-tests/Unit/                      83 tests: converter, probe, playlists, tokens, budget, index reads, ranges, UA, heatmap, subtitle names, templates
+tests/Unit/                      88 tests: converter, probe, playlists, tokens, budget, index reads, ranges, UA, heatmap, subtitle names, templates, ffmpeg input formats (these need ffmpeg: run them in the nextcloud container)
 ```
 
 ## Decisions that aren't obvious from the code
@@ -80,6 +80,16 @@ Reviewed by hand in phase 8 (IDOR on every owner route, token HMACs, stream path
 - Guessing someone else's code is throttled (5 guesses per code, brute-force protection per IP).
 - No DRM: screen recording, or a script on the viewer's own machine that copies the session, can still capture a film (at most about 3× real time); the watermark makes leaks traceable.
 
+Fixed after the review of 2026-10-26:
+- **ffmpeg input:** ffmpeg picks a format by content, and hls/concat/image2 read other files by path, so a ".mp4" that is really a playlist could pull in another user's files (ffmpeg 4.2 doesn't refuse this; 7.1 refuses HLS but still opens concat lists). `Ffmpeg::inputOptions()` (`-protocol_whitelist file -format_whitelist <INPUT_FORMATS>`) goes before every `-i`, for ffprobe and ffmpeg. A new container format must be added to `INPUT_FORMATS`.
+- **Budget per invite:** it was per session, so a script reloading the page got a fresh 180 s burst each time (`scripts/budget-reload.sh` shows it). Now one bucket per invite, capped at 180 s.
+
+Still open from that review (low risk on a server with few trusted accounts):
+- A screening can use a file shared *to* the owner, even a share with downloads disabled.
+- Any user can send designed HTML mail from the server's noreply address (100/hour); the sender name is their own display name. `TemplateRenderer::clean` is a weak regex (`<img/onerror=…>` passes), harmless while the design only renders in the sandboxed preview and mail clients.
+- The code-attempt counter in `OtpService::verify` isn't atomic; parallel guesses can exceed 5 per code.
+- Subtitle files placed next to a video in a shared folder by a collaborator are imported automatically; conversions have no timeout.
+
 ## History
 
 | Version / commit | What |
@@ -93,6 +103,7 @@ Reviewed by hand in phase 8 (IDOR on every owner route, token HMACs, stream path
 | 2b86700 | 0.3.7: subtitles follow their files; ffmpeg detection under open_basedir |
 | 514311e | 0.3.8: invitation email designer; the picker's Choose button |
 | 8b34672 | Dev skill lessons and test scripts |
+| (this commit) | 0.3.10: ffmpeg opens only plain media containers; playback budget per invite |
 
 ## Production (details outside the repo)
 

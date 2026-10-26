@@ -57,7 +57,9 @@ class Transcoder {
 
 		$command = array_merge(
 			$this->niceWrapper(),
-			[$ffmpeg, '-hide_banner', '-nostdin', '-y', '-i', $source],
+			[$ffmpeg, '-hide_banner', '-nostdin', '-y'],
+			Ffmpeg::inputOptions(),
+			['-i', $source],
 			$args['codec'],
 			[
 				'-f', 'hls',

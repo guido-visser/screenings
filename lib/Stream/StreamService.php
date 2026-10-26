@@ -106,7 +106,7 @@ class StreamService {
 			if (!PlaybackBudget::withinWindow($start, $ctx->session->getLastPositionS())) {
 				throw new StreamDenied(StreamDenied::AHEAD);
 			}
-			$this->budget->consume($ctx->session->getId(), $this->time->getTime() - $ctx->session->getStartedAt(), $duration);
+			$this->budget->consume($ctx->invite->getId(), $this->time->getTime(), $duration);
 			return ['content' => $this->read($screening, $file), 'type' => 'video/mp2t'];
 		}
 
@@ -146,7 +146,7 @@ class StreamService {
 			if (!PlaybackBudget::withinWindow($approxTime, $ctx->session->getLastPositionS())) {
 				throw new StreamDenied(StreamDenied::AHEAD);
 			}
-			$this->budget->consume($ctx->session->getId(), $this->time->getTime() - $ctx->session->getStartedAt(), ($end - $start + 1) / $bytesPerSecond);
+			$this->budget->consume($ctx->invite->getId(), $this->time->getTime(), ($end - $start + 1) / $bytesPerSecond);
 		}
 
 		return new RangeResponse(fn () => MediaService::seekableStream($file), $start, $end, $size, 'video/mp4');

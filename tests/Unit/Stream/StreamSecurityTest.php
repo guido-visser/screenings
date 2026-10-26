@@ -54,6 +54,54 @@ class StreamSecurityTest extends TestCase {
 	}
 
 	public function testBudgetAllowsBurstThenRealTimeSpeedLimit(): void {
+		$budget = $this->budget();
+
+		// A fresh invite can fetch the burst (45 four-second segments)...
+		for ($i = 0; $i < PlaybackBudget::BURST_SECONDS / 4; $i++) {
+			$budget->consume(1, 1000, 4.0);
+		}
+		// ...but not one more until time passes.
+		try {
+			$budget->consume(1, 1000, 4.0);
+			$this->fail('Budget should be exhausted');
+		} catch (StreamDenied $e) {
+			$this->assertSame(StreamDenied::AHEAD, $e->reason);
+		}
+		// After 10 s it may fetch 30 s more (3x real time).
+		for ($i = 0; $i < 7; $i++) {
+			$budget->consume(1, 1010, 4.0);
+		}
+		$this->expectException(StreamDenied::class);
+		$budget->consume(1, 1010, 4.0);
+	}
+
+	public function testBudgetBelongsToTheInviteNotTheSession(): void {
+		$budget = $this->budget();
+		for ($i = 0; $i < PlaybackBudget::BURST_SECONDS / 4; $i++) {
+			$budget->consume(1, 1000, 4.0);
+		}
+		// Another invite has its own budget.
+		$budget->consume(2, 1000, 4.0);
+
+		// Reloading the page (a new session) a second later gives no new burst.
+		$this->expectException(StreamDenied::class);
+		$budget->consume(1, 1001, 4.0);
+	}
+
+	public function testBudgetDoesNotSaveUpWhileIdle(): void {
+		$budget = $this->budget();
+		$budget->consume(1, 1000, 4.0);
+
+		// An hour later the bucket is full again, but holds no more than the burst.
+		$this->assertSame((float)PlaybackBudget::BURST_SECONDS, PlaybackBudget::refilled(0.0, 3600));
+		for ($i = 0; $i < PlaybackBudget::BURST_SECONDS / 4; $i++) {
+			$budget->consume(1, 4600, 4.0);
+		}
+		$this->expectException(StreamDenied::class);
+		$budget->consume(1, 4600, 4.0);
+	}
+
+	private function budget(): PlaybackBudget {
 		$store = [];
 		$cache = $this->createMock(ICache::class);
 		$cache->method('get')->willReturnCallback(function ($key) use (&$store) {
@@ -65,25 +113,7 @@ class StreamSecurityTest extends TestCase {
 		});
 		$factory = $this->createMock(ICacheFactory::class);
 		$factory->method('createDistributed')->willReturn($cache);
-		$budget = new PlaybackBudget($factory);
-
-		// A fresh session can fetch the burst (45 four-second segments)...
-		for ($i = 0; $i < PlaybackBudget::BURST_SECONDS / 4; $i++) {
-			$budget->consume(1, 0, 4.0);
-		}
-		// ...but not one more until time passes.
-		try {
-			$budget->consume(1, 0, 4.0);
-			$this->fail('Budget should be exhausted');
-		} catch (StreamDenied $e) {
-			$this->assertSame(StreamDenied::AHEAD, $e->reason);
-		}
-		// After 10 s it may fetch 30 s more (3x real time).
-		for ($i = 0; $i < 7; $i++) {
-			$budget->consume(1, 10, 4.0);
-		}
-		$this->expectException(StreamDenied::class);
-		$budget->consume(1, 10, 4.0);
+		return new PlaybackBudget($factory);
 	}
 
 	public function testParseRange(): void {

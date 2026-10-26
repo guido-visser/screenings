@@ -110,6 +110,7 @@ D="/c/Program Files/Docker/Docker/resources/bin/docker.exe"
 ## Ready-made test scripts (`scripts/`)
 
 - **`leaktest.sh <invite-token>`:** acts as a viewer with curl (cookie jar) and tries the misuse cases (no token, no cookie, other UA, scripted segment download, faked heartbeat). Expected: 403s, `ahead` at about 92 s. Its last output line prints the cookie, token, session ID and UA, for an ffmpeg test inside the container.
+- **`budget-reload.sh <invite-token>`** (repo root): scripted Direct MP4 download with faked heartbeats that reloads the page on every refusal. Use a 600 s MP4 invite (`T8i1f…`, screening 16). Expected: about 180 s of media, then 429 in every new session. The bucket refills in 60 s, so wait a minute before playing that invite in the browser.
 - **`verify-hls.sh <screeningId> <mediaToken>`** (run inside the container after `compose cp` to `/tmp`): checks that segments are unreadable without the key and that every variant decodes with it.
 - **`geoip-check.php`** (inside the container): GeoIpService status and lookups against MaxMind's test database.
 - **`nc-errors.py`:** filters `nextcloud.log` down to real errors. "Cannot write into apps directory" after `occ upgrade` and "Backends provided no user object" are dev noise.

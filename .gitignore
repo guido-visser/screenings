@@ -6,3 +6,6 @@
 .phpunit.result.cache
 /build/work/
 /build/*.tar.gz
+/dev/deploy.env
+/build/package.log
+/build/*.commit

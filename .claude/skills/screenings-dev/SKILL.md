@@ -1,6 +1,6 @@
 ---
 name: screenings-dev
-description: Working on the Screenings Nextcloud app in this repo - running the Docker dev stack, tests, builds, browser checks, Mailpit, DB queries, leak tests, and the Windows/Docker pitfalls that waste time. Use before any build, test, debug or verification step in this project.
+description: Working on the Screenings Nextcloud app in this repo - running the Docker dev stack, tests, builds, browser checks, Mailpit, DB queries, leak tests, deploying to production with one script, and the Windows/Docker pitfalls that waste time. Use before any build, test, debug, verification or deploy step in this project.
 ---
 
 # Screenings dev workflow
@@ -17,6 +17,28 @@ Project state and next steps: `docs/HANDOFF.md`. Read that first in a new chat.
 - **Quoting:** complex `sh -c '…'` one-liners with `$( )` and quotes break under PowerShell. Write a script file in the scratchpad and run it with Bash instead.
 - **Waiting:** foreground `sleep` alone is blocked. Poll inside a loop (`for i in $(seq 1 30); do sleep 3; … && break; done`).
 - **Starting Docker:** if the engine isn't running, start "C:\Program Files\Docker\Docker\Docker Desktop.exe" and poll `docker info`.
+- **Backslashes in Python heredocs get collapsed** in this environment (`\\'` arrives as `'`, `"\\n"` as a real newline, `\S` triggers warnings). For edits whose text contains backslashes (PHP namespaces, escaped quotes, `\n`, binary test strings), use the Edit tool, not a Python script.
+- **Never leave a bare `cat > file`** (without a heredoc) in a command: it waits for stdin until the timeout.
+- **Printing non-ASCII from host Python** (e.g. "→" in error messages) fails on the Windows console; set `PYTHONIOENCODING=utf-8`.
+- **App config is cached briefly** in the web process: after `occ config:app:set`, a request a second later can still see the old value. Wait a few seconds before testing.
+
+## Deploying to production (only when Guido asks)
+
+Never deploy on your own initiative; an earlier "deploy" doesn't cover later changes. When asked, one command does everything, from the repo root, with a few lines of output:
+
+```bash
+sh .claude/skills/screenings-dev/scripts/deploy.sh --check              # state of the server; changes nothing
+sh .claude/skills/screenings-dev/scripts/deploy.sh                      # build, upload, swap, occ upgrade, enable, check
+sh .claude/skills/screenings-dev/scripts/deploy.sh --enable-transcode   # same, and allow video conversion
+sh .claude/skills/screenings-dev/scripts/deploy.sh --rollback           # put the previous version back
+```
+
+- Server details live in `dev/deploy.env`, which is git-ignored (template: `dev/deploy.env.example`). **Never write host names, users or key paths into tracked files**: the repo is public on GitHub, and a commit containing them was blocked once.
+- Run it with a long timeout (`timeout: 600000`) or in the background: a fresh build takes a few minutes because of `npm ci`. A package of the same clean commit is reused, so commit first and the deploy after testing skips the build.
+- Expected output: `build`, `upload`, `install`, then `app: <new> (was <old>), enabled: yes, maintenance: false, conversion enabled: …`, and `check: viewer script 200, portal 303`. Anything else: look at `build/package.log` (build) or run `--check`.
+- The previous app folder is kept as `~/screenings-backup` on the server (`--rollback` restores it). Data and settings live in the database and app data, so swapping folders keeps them.
+- After deploying, check the result in the browser pane only if the change needs it (the owner's own invite link plays a film; it records a viewing session for him, so say so).
+- To test changes to `deploy.sh` itself, point `DEPLOY_CONFIG` at a config with `DEPLOY_CONTAINER=<name>` of a throwaway container (see the package check under "Ready-made test scripts"), with `DEPLOY_NC_DIR="/var/www/html"`, `DEPLOY_APPS_DIR="custom_apps"`, `DEPLOY_PHP="php"`, `DEPLOY_URL="http://localhost:8090"`.
 
 ## Everyday commands (from `dev/`)
 

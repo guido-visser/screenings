@@ -107,7 +107,9 @@ Per invite you can ask a viewer for **notes**: thoughts tied to a moment in the 
 
 The viewer then sees a note button in the player (or presses **N**). The film pauses and a box opens with the time already filled in. **Enter** saves, Shift+Enter starts a new line, Esc cancels, and the film carries on where it was. The box sits inside the player, so it also works in full screen. Their notes show as markers on the seek bar and in a "My notes" list under the player, where they can jump to a note, edit it or delete it.
 
-You see each note in the viewer's activity timeline (filter **Notes**), always with its current text. Notes are kept until the invite or screening is deleted: the retention period doesn't apply to them, because the viewer gave them to you on purpose. A viewer can leave at most 60 notes per hour.
+**Reviewing notes:** the screening's **Notes** tab plays the film with every viewer's notes as markers on its timeline, one colour per viewer. Markers that are close together become a numbered bubble that opens a list. Hover a marker to see who wrote what. Click a marker, or a note in the list next to the video, to jump there: the note appears over the video, also in full screen. Choose **Stay paused** or **Play from note** for what happens after a jump; the choice is remembered in your browser. While the film plays, the list follows along. Filter by viewer, delete notes, copy a link to one note, and download everything as a spreadsheet (CSV) or as subtitles (SRT) to load into your editing timeline, one 4-second cue per note. Watching here isn't tracked and has no speed limit: it's your own film.
+
+You get a Nextcloud notification when a viewer leaves notes: one per viewing session, updated with the count ("Anna left 4 notes on …"). Each note also appears in the viewer's activity timeline (filter **Notes**), always with its current text. Notes are kept until the invite or screening is deleted: the retention period doesn't apply to them, because the viewer gave them to you on purpose. A viewer can leave at most 60 notes per hour.
 
 ## How playback is protected
 

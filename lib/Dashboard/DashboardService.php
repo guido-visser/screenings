@@ -76,6 +76,8 @@ class DashboardService {
 				'watchingNow' => $watchingNow,
 				'averagePercent' => $started === [] ? null : round(array_sum(array_column($started, 'percent')) / count($started), 1),
 				'totalWatchedSeconds' => round(array_sum(array_column($viewers, 'watchedSeconds')), 1),
+				'notes' => array_sum($this->notes->countByInvite($screening->getId())),
+				'notesAsked' => count(array_filter($invites, fn (Invite $i) => $i->mayLeaveNotes())),
 			],
 			'heatmap' => [
 				'bucketSeconds' => Heatmap::bucketSeconds($durationS),

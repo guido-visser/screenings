@@ -28,6 +28,7 @@
 
 			<DashboardView v-if="view === 'dashboard'" :screening="screening" />
 			<MailTemplateEditor v-else-if="view === 'email'" :screening-id="screening.id" />
+			<NotesReview v-else-if="view === 'notes'" :screening="screening" :note-id="noteId" />
 			<ViewerDetail v-else-if="view === 'viewer'"
 				:key="inviteId"
 				:screening="screening"
@@ -169,14 +170,17 @@ import { screeningHash } from '../router.js'
 import DashboardView from './DashboardView.vue'
 import MailTemplateEditor from './MailTemplateEditor.vue'
 import MediaStatus from './MediaStatus.vue'
+import NotesReview from './NotesReview.vue'
 import SubtitlesSection from './SubtitlesSection.vue'
 import ViewerDetail from './ViewerDetail.vue'
 
 const props = defineProps({
 	screeningId: { type: Number, required: true },
-	/** "dashboard", "settings", "email" or "viewer" */
+	/** "dashboard", "settings", "email", "notes" or "viewer" */
 	view: { type: String, default: 'dashboard' },
 	inviteId: { type: Number, default: null },
+	/** For "notes": open at this note. */
+	noteId: { type: Number, default: null },
 })
 const emit = defineEmits(['updated', 'deleted'])
 
@@ -225,6 +229,7 @@ function videoFilter(mode) {
 const tabs = computed(() => [
 	// A viewer's activity belongs to the dashboard.
 	{ view: 'dashboard', label: t('screenings', 'Dashboard'), active: props.view === 'dashboard' || props.view === 'viewer' },
+	{ view: 'notes', label: t('screenings', 'Notes'), active: props.view === 'notes' },
 	{ view: 'settings', label: t('screenings', 'Settings'), active: props.view === 'settings' },
 	{ view: 'email', label: t('screenings', 'Invitation email'), active: props.view === 'email' },
 ])
@@ -448,9 +453,15 @@ onMounted(load)
 .screening__tabs {
 	display: flex;
 	gap: 4px;
+	/* Four tabs don't fit a phone: scroll them sideways instead of clipping. */
+	max-width: 100%;
+	overflow-x: auto;
+	scrollbar-width: none;
 }
 
 .screening__tab {
+	flex: none;
+	white-space: nowrap;
 	padding: 8px 14px;
 	border-radius: var(--border-radius-element, 8px);
 	color: var(--color-main-text);

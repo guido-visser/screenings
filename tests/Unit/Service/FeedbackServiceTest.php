@@ -48,6 +48,40 @@ class FeedbackServiceTest extends TestCase {
 		}
 	}
 
+	public function testTimecodes(): void {
+		$this->assertSame('0:03', FeedbackService::timecode(3.4, false));
+		$this->assertSame('1:02:03', FeedbackService::timecode(3723, false));
+		$this->assertSame('00:00:03,450', FeedbackService::timecode(3.45, true));
+		$this->assertSame('01:02:03,000', FeedbackService::timecode(3723, true));
+		$this->assertSame('0:00', FeedbackService::timecode(-5, false));
+	}
+
+	private function exportData(): array {
+		return [
+			'notes' => [
+				['id' => 1, 'inviteId' => 7, 'position' => 3.5, 'body' => "Too long here\n\nCut?", 'createdAt' => 1793050569],
+				['id' => 2, 'inviteId' => 8, 'position' => 3723.0, 'body' => '=HYPERLINK("x")', 'createdAt' => 1793050600],
+			],
+			'viewers' => [
+				['inviteId' => 7, 'name' => 'Anna, "the editor"', 'email' => 'anna@example.test', 'colour' => 0, 'count' => 1],
+				['inviteId' => 8, 'name' => '@Bob', 'email' => 'bob@example.test', 'colour' => 1, 'count' => 1],
+			],
+		];
+	}
+
+	public function testSrtHasOneCuePerNote(): void {
+		$expected = "1\n00:00:03,500 --> 00:00:07,500\nAnna, \"the editor\": Too long here\nCut?\n"
+			. "\n2\n01:02:03,000 --> 01:02:07,000\n@Bob: =HYPERLINK(\"x\")\n";
+		$this->assertSame($expected, FeedbackService::srt($this->exportData()));
+	}
+
+	public function testCsvQuotesAndDefusesFormulas(): void {
+		$csv = FeedbackService::csv($this->exportData());
+		$this->assertStringStartsWith("\u{FEFF}time,seconds,viewer,email,note,written\n", $csv);
+		$this->assertStringContainsString('0:03,3.5,"Anna, ""the editor""",anna@example.test,"Too long here' . "\n\nCut?" . '",', $csv);
+		$this->assertStringContainsString('1:02:03,3723,\'@Bob,bob@example.test,"\'=HYPERLINK(""x"")",', $csv);
+	}
+
 	public function testOpenLinkVisitorsNeverLeaveFeedback(): void {
 		$invite = new Invite();
 		$invite->setSource(Invite::SOURCE_INVITED);

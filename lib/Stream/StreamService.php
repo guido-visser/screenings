@@ -89,13 +89,60 @@ class StreamService {
 	}
 
 	/**
+	 * What the owner's preview player needs (the notes review page). Plain
+	 * URLs: the owner's own Nextcloud login authorizes them.
+	 */
+	public function previewConfig(Screening $screening): array {
+		$id = $screening->getId();
+		$hls = $screening->servedAs() !== Screening::MODE_MP4;
+		$route = fn (string $name, array $params = []) => $this->urlGenerator->linkToRoute(Application::APP_ID . '.preview.' . $name, ['id' => $id] + $params);
+
+		$subtitles = [];
+		foreach ($this->subtitles->listForScreening($id) as $subtitle) {
+			$subtitles[] = [
+				'id' => $subtitle->getId(),
+				'lang' => $subtitle->getLang(),
+				'label' => $subtitle->getLabel(),
+				'isDefault' => (bool)$subtitle->getIsDefault(),
+				'src' => $route('subtitle', ['subtitleId' => $subtitle->getId()]),
+			];
+		}
+
+		return [
+			'ready' => $screening->getMediaStatus() === Screening::MEDIA_READY,
+			'mode' => $hls ? 'hls' : 'mp4',
+			'src' => $hls ? $route('file', ['file' => MediaStorage::MASTER_PLAYLIST]) : $route('mp4'),
+			'durationS' => ($screening->getDurationMs() ?? 0) / 1000,
+			'subtitles' => $subtitles,
+		];
+	}
+
+	/**
 	 * A file of the encrypted HLS package: a playlist, the key or a segment.
 	 *
 	 * @return array{content: string, type: string}
 	 * @throws StreamDenied
 	 */
 	public function hlsFile(StreamContext $ctx, string $file): array {
-		$screening = $ctx->screening;
+		return $this->hlsContent($ctx->screening, $file, $ctx);
+	}
+
+	/**
+	 * The same for the owner's own preview: no session, window or budget.
+	 *
+	 * @return array{content: string, type: string}
+	 * @throws StreamDenied
+	 */
+	public function previewHlsFile(Screening $screening, string $file): array {
+		return $this->hlsContent($screening, $file, null);
+	}
+
+	/**
+	 * @param ?StreamContext $ctx a viewer's session (window and budget apply), or null for the owner
+	 * @return array{content: string, type: string}
+	 * @throws StreamDenied
+	 */
+	private function hlsContent(Screening $screening, string $file, ?StreamContext $ctx): array {
 		if ($screening->servedAs() === Screening::MODE_MP4 || $screening->getMediaToken() === null) {
 			throw new StreamDenied(StreamDenied::NOT_FOUND, 404);
 		}
@@ -107,10 +154,12 @@ class StreamService {
 				throw new StreamDenied(StreamDenied::NOT_FOUND, 404);
 			}
 			[$start, $duration] = $segments[$index];
-			if (!PlaybackBudget::withinWindow($start, $ctx->session->getLastPositionS())) {
-				throw new StreamDenied(StreamDenied::AHEAD);
+			if ($ctx !== null) {
+				if (!PlaybackBudget::withinWindow($start, $ctx->session->getLastPositionS())) {
+					throw new StreamDenied(StreamDenied::AHEAD);
+				}
+				$this->budget->consume($ctx->invite->getId(), $this->time->getTime(), $duration);
 			}
-			$this->budget->consume($ctx->invite->getId(), $this->time->getTime(), $duration);
 			return ['content' => $this->read($screening, $file), 'type' => 'video/mp2t'];
 		}
 
@@ -129,7 +178,23 @@ class StreamService {
 	 * @throws StreamDenied
 	 */
 	public function mp4Range(StreamContext $ctx, ?string $rangeHeader): RangeResponse {
-		$screening = $ctx->screening;
+		return $this->mp4Content($ctx->screening, $rangeHeader, $ctx);
+	}
+
+	/**
+	 * The owner's preview: same chunk size, no window or budget.
+	 *
+	 * @throws StreamDenied
+	 */
+	public function previewMp4Range(Screening $screening, ?string $rangeHeader): RangeResponse {
+		return $this->mp4Content($screening, $rangeHeader, null);
+	}
+
+	/**
+	 * @param ?StreamContext $ctx a viewer's session (window and budget apply), or null for the owner
+	 * @throws StreamDenied
+	 */
+	private function mp4Content(Screening $screening, ?string $rangeHeader, ?StreamContext $ctx): RangeResponse {
 		$file = $screening->servedAs() === Screening::MODE_MP4 ? $this->media->sourceFile($screening) : null;
 		if ($file === null) {
 			throw new StreamDenied(StreamDenied::NOT_FOUND, 404);
@@ -142,7 +207,7 @@ class StreamService {
 		$indexEnd = self::indexReadEnd($start, $end, $layout['moovOffset'], $layout['moovSize']);
 		if ($indexEnd !== null) {
 			$end = $indexEnd;
-		} else {
+		} elseif ($ctx !== null) {
 			// Map the byte offset to an approximate time to apply the playhead
 			// window. Bitrates vary, so allow 50% slack on top of the window.
 			$bytesPerSecond = $layout['durationS'] > 0 ? $size / $layout['durationS'] : $size;
@@ -160,9 +225,18 @@ class StreamService {
 	 * @throws StreamDenied
 	 */
 	public function subtitle(StreamContext $ctx, int $subtitleId): string {
+		return $this->previewSubtitle($ctx->screening, $subtitleId);
+	}
+
+	/**
+	 * A subtitle of this screening as WebVTT (the owner's preview uses it directly).
+	 *
+	 * @throws StreamDenied
+	 */
+	public function previewSubtitle(Screening $screening, int $subtitleId): string {
 		try {
 			$subtitle = $this->subtitles->get($subtitleId);
-			if ($subtitle->getScreeningId() !== $ctx->screening->getId()) {
+			if ($subtitle->getScreeningId() !== $screening->getId()) {
 				throw new StreamDenied(StreamDenied::NOT_FOUND, 404);
 			}
 			return $this->subtitles->content($subtitle);

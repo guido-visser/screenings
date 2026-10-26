@@ -54,6 +54,17 @@ class NoteMapper extends QBMapper {
 		return $this->findEntities($qb);
 	}
 
+	public function countForSession(int $sessionId): int {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select($qb->func()->count('id', 'notes'))
+			->from($this->getTableName())
+			->where($qb->expr()->eq('session_id', $qb->createNamedParameter($sessionId, IQueryBuilder::PARAM_INT)));
+		$result = $qb->executeQuery();
+		$count = (int)$result->fetchOne();
+		$result->closeCursor();
+		return $count;
+	}
+
 	/**
 	 * Notes per invite of a screening.
 	 *

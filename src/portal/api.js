@@ -17,6 +17,21 @@ export default {
 	async screeningsBySource() {
 		return (await axios.get(url('/screenings/by-source'))).data
 	},
+	/** The owner's own player: mode, src, duration and subtitles. */
+	async preview(screeningId) {
+		return (await axios.get(url(`/screenings/${screeningId}/preview`))).data
+	},
+	/** { notes: [...], viewers: [{ inviteId, name, email, colour, count }] } */
+	async notes(screeningId) {
+		return (await axios.get(url(`/screenings/${screeningId}/notes`))).data
+	},
+	async deleteNote(id) {
+		await axios.delete(url(`/notes/${id}`))
+	},
+	/** Download link: format "csv" or "srt". */
+	notesExportUrl(screeningId, format) {
+		return url(`/screenings/${screeningId}/notes.${format}`)
+	},
 	async getScreening(id) {
 		return (await axios.get(url(`/screenings/${id}`))).data
 	},

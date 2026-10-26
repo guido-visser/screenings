@@ -29,6 +29,12 @@
 					<span class="tile__label">{{ t('screenings', 'Average watched') }}</span>
 					<span class="tile__value">{{ totals.averagePercent === null ? '–' : Math.round(totals.averagePercent) + '%' }}</span>
 				</div>
+				<a v-if="totals.notes || totals.notesAsked"
+					class="tile tile--link"
+					:href="screeningHash(screening.id, 'notes')">
+					<span class="tile__label">{{ t('screenings', 'Notes') }}</span>
+					<span class="tile__value">{{ totals.notes }}</span>
+				</a>
 			</section>
 
 			<section class="dashboard__section">
@@ -267,6 +273,17 @@ onBeforeUnmount(() => {
 	padding: 14px 16px;
 	border: 1px solid var(--color-border);
 	border-radius: var(--border-radius-large, 12px);
+}
+
+.tile--link {
+	color: inherit;
+	text-decoration: none;
+}
+
+.tile--link:hover,
+.tile--link:focus-visible {
+	border-color: var(--color-primary-element);
+	background: var(--color-background-hover);
 }
 
 .tile__label {

@@ -8,6 +8,7 @@ use OCA\Files\Event\LoadAdditionalScriptsEvent;
 use OCA\Screenings\Listener\LoadFilesScriptsListener;
 use OCA\Screenings\Listener\SubtitleFileListener;
 use OCA\Screenings\Listener\UserDeletedListener;
+use OCA\Screenings\Notification\Notifier;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
@@ -29,6 +30,7 @@ class Application extends App implements IBootstrap {
 		self::registerVendorAutoloader();
 		$context->registerEventListener(LoadAdditionalScriptsEvent::class, LoadFilesScriptsListener::class);
 		$context->registerEventListener(UserDeletedEvent::class, UserDeletedListener::class);
+		$context->registerNotifierService(Notifier::class);
 		foreach ([NodeCreatedEvent::class, NodeWrittenEvent::class, NodeRenamedEvent::class, NodeCopiedEvent::class] as $event) {
 			$context->registerEventListener($event, SubtitleFileListener::class);
 		}

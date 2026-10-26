@@ -48,6 +48,7 @@
 				:screening-id="selectedId"
 				:view="route.view"
 				:invite-id="route.inviteId"
+				:note-id="route.noteId"
 				@updated="onUpdated"
 				@deleted="onDeleted" />
 			<NcEmptyContent v-else

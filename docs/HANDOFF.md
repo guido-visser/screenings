@@ -1,6 +1,6 @@
 # Handoff: Screenings (Nextcloud app)
 
-State as of 2026-10-26, after phase 8 (hardening). Repo: https://github.com/guido-visser/screenings
+State as of 2026-10-26: version 0.3.8, deployed to Guido's server (see "After phase 8" below for what changed since the plan). Repo: https://github.com/guido-visser/screenings
 
 **Before doing anything, read the project skill `.claude/skills/screenings-dev/SKILL.md`.** It has the commands and the Windows/Docker pitfalls that cost a lot of time when rediscovered.
 
@@ -58,7 +58,8 @@ The original plan (8 phases) is in [PLAN.md](PLAN.md). Some details changed alon
 
 1. **Browser testing not possible here:** Firefox, Safari (macOS), iPhone/iPad. The in-app browser is Chromium only. Points to watch: hls.js with ManagedMediaSource on iOS 17.1+, older iOS falling back to native HLS (which can't send the `X-Screening-Token` header, so it will fail), the SameSite=Strict cookie on Safari, and `sendBeacon` on page leave.
 2. **App store:** signing (`occ integrity:sign-app`) needs a certificate from Nextcloud; `<bugs>` in info.xml is still a placeholder URL.
-3. **Optional:** Playwright end-to-end tests, psalm, l10n extraction, a per-day cap on code emails per address.
+3. **Not yet confirmed on the server by Guido:** the fullscreen controls (he reported them missing on Chrome 156/Windows; not reproducible here, hardening shipped in 0.3.6), a real conversion (ProRes/MKV) with ffmpeg 4.2, an automatically added subtitle, and a sent invitation in a custom design.
+4. **Optional:** Playwright end-to-end tests, psalm, l10n extraction, a per-day cap on code emails per address, a designable one-time-code email, pretty URLs on the server (hosting setting).
 
 ## Architecture map
 

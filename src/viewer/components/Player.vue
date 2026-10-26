@@ -46,7 +46,25 @@
 
 		<div v-if="buffering && !stopReason" class="player__spinner" aria-hidden="true" />
 
-		<button v-if="!playing && !stopReason && !started"
+		<dialog v-if="resumeAt !== null"
+			ref="resumeDialog"
+			class="player__resume"
+			aria-labelledby="player-resume-title"
+			@cancel.prevent>
+			<h2 id="player-resume-title">{{ t('screenings', 'Welcome back') }}</h2>
+			<p>{{ t('screenings', 'Do you want to start over, or continue where you left off?') }}</p>
+			<p class="player__resume-at">{{ t('screenings', 'You stopped at {time}.', { time: formatTime(resumeAt) }) }}</p>
+			<div class="player__resume-actions">
+				<button class="player__resume-button" @click="startOver">
+					{{ t('screenings', 'Start over') }}
+				</button>
+				<button class="player__resume-button player__resume-button--primary" autofocus @click="continueWatching">
+					{{ t('screenings', 'Continue where I left off') }}
+				</button>
+			</div>
+		</dialog>
+
+		<button v-if="!playing && !stopReason && !started && !asking"
 			class="player__big-play"
 			:aria-label="t('screenings', 'Play')"
 			@click="togglePlay">
@@ -166,6 +184,11 @@ const currentLevel = ref(-1)
 const fullscreen = ref(false)
 const idle = ref(false)
 const stopReason = ref(null)
+// Where this invite stopped last time (from the server); the viewer chooses
+// between that and the beginning before anything plays.
+const resumeAt = props.playback.resumeAt ?? null
+const resumeDialog = ref(null)
+const asking = ref(resumeAt !== null)
 
 let hls = null
 let heartbeat = null
@@ -403,6 +426,41 @@ async function onVideoError() {
 	v.src = props.playback.src
 }
 
+function closeResumeDialog() {
+	asking.value = false
+	resumeDialog.value?.close()
+}
+
+function startOver() {
+	closeResumeDialog()
+	// Still inside the click, so the browser allows playback with sound.
+	togglePlay()
+}
+
+async function continueWatching() {
+	closeResumeDialog()
+	const v = video.value
+	if (stopReason.value || !v) {
+		return
+	}
+	started.value = true
+	currentTime.value = resumeAt
+	// A seek before the player knows the film can get lost (hls.js).
+	if (v.readyState < HTMLMediaElement.HAVE_METADATA) {
+		await new Promise((resolve) => v.addEventListener('loadedmetadata', resolve, { once: true }))
+	}
+	// seekTo() tells the server about the jump before the player fetches there.
+	await seekTo(resumeAt)
+	if (stopReason.value) {
+		return
+	}
+	// Some browsers (Safari) only allow sound right inside the click; then
+	// the big play button comes back.
+	v.play().catch(() => {
+		started.value = false
+	})
+}
+
 function seekBy(delta) {
 	seekTo((video.value?.currentTime ?? 0) + delta)
 }
@@ -569,8 +627,11 @@ function onNativeFullscreen(event) {
 function onVisibilityChange() {
 	tracker.track(document.visibilityState === 'hidden' ? 'visibility_hidden' : 'visibility_visible', position())
 	if (document.visibilityState === 'hidden') {
-		// Mobile browsers may never fire pagehide; send what we have now.
+		// Mobile browsers may never fire pagehide (a tab closed from the
+		// switcher, a killed app); send what we have now, the playhead too,
+		// so "continue where you left off" knows where it was.
 		tracker.flush(true)
+		heartbeat.final()
 	}
 }
 
@@ -621,7 +682,8 @@ function onDocumentPointer() {
 }
 
 function onKey(event) {
-	if (event.target instanceof HTMLSelectElement || stopReason.value) {
+	// The resume dialog sits inside the player, so its key presses bubble here.
+	if (event.target instanceof HTMLSelectElement || stopReason.value || asking.value) {
 		return
 	}
 	const actions = {
@@ -677,6 +739,7 @@ onMounted(() => {
 	video.value.addEventListener('webkitbeginfullscreen', onNativeFullscreen)
 	video.value.addEventListener('webkitendfullscreen', onNativeFullscreen)
 	wake()
+	resumeDialog.value?.showModal()
 })
 
 onBeforeUnmount(() => {

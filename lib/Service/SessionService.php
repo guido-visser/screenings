@@ -22,6 +22,10 @@ use OCP\Security\ISecureRandom;
  */
 class SessionService {
 	private const COOKIE_PREFIX = 'scr_sess_';
+	/** Positions before this aren't offered for resuming. */
+	private const RESUME_MIN_S = 10.0;
+	/** Within this much of the end, the film counts as finished. */
+	private const RESUME_END_MARGIN_S = 60.0;
 
 	public function __construct(
 		private ViewerSessionMapper $mapper,
@@ -60,6 +64,21 @@ class SessionService {
 		// No expiry date: a browser-session cookie.
 		$response->addCookie(self::cookieName($invite), $session->getId() . '.' . $secret, null, 'Strict');
 		return $session;
+	}
+
+	/**
+	 * Where the invite stopped watching last time, or null when there is
+	 * nothing worth resuming: no earlier session past the first seconds, or
+	 * one that reached the closing minute (credits) of the film.
+	 * Call before start(), which doesn't touch earlier sessions' positions.
+	 */
+	public function resumePosition(Invite $invite, float $durationS): ?float {
+		$last = $this->mapper->findLastWatched($invite->getId(), self::RESUME_MIN_S);
+		$position = $last?->getLastPositionS();
+		if ($position === null || ($durationS > 0 && $position >= $durationS - self::RESUME_END_MARGIN_S)) {
+			return null;
+		}
+		return round($position, 1);
 	}
 
 	/**

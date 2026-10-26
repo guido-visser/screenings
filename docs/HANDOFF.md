@@ -1,6 +1,6 @@
 # Handoff: Screenings (Nextcloud app)
 
-**State on 2026-10-26:** version **0.3.10** in `main`, not deployed yet (`deploy.sh --check` shows what runs on Guido's Nextcloud, NC 35.0.2). `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
+**State on 2026-10-26:** version **0.3.11** in `main`, not deployed yet (`deploy.sh --check` shows what runs on Guido's Nextcloud, NC 35.0.2). `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
 
 **Start here:** read the project skill `.claude/skills/screenings-dev/SKILL.md` before building, testing or deploying. It has the commands, the deploy script, the production quirks and the Windows/Docker pitfalls that cost a lot of time when rediscovered. User-facing behaviour is documented in the [README](../README.md); the original 8-phase plan is in [PLAN.md](PLAN.md) (done, partly superseded).
 
@@ -64,7 +64,7 @@ tests/Unit/                      88 tests: converter, probe, playlists, tokens, 
 ## Decisions that aren't obvious from the code
 
 - **Encryption:** every HLS segment is encrypted by `HlsPackager` with IV = media sequence. ffmpeg's own HLS encryption isn't used (it reuses one IV).
-- **Sessions:** one cookie per invite (`scr_sess_<inviteId>`, SameSite=Strict); a second tab replaces the first. `ended_at` only means "replaced"; "live" is a heartbeat under 20 s old. The "password entered" cookie is SameSite=Lax so it survives clicks from mail apps.
+- **Sessions:** one cookie per invite (`scr_sess_<inviteId>`, SameSite=Strict); a second tab replaces the first. `ended_at` only means "replaced"; "live" is a heartbeat under 20 s old. The "password entered" cookie is SameSite=Lax so it survives clicks from mail apps. The resume point is the `last_position_s` of the invite's most recently active session past 10 s (`SessionService::resumePosition`, read before the new session starts); a new session sitting at 0:00 under the dialog doesn't overwrite it.
 - **Tokens:** HLS requests carry a 60 s token (header, bound to IP + UA); MP4 and VTT URLs carry a session+UA signature (`?sig=`), because the browser fetches them itself.
 - **Direct MP4 index:** reads of the `moov` box are always allowed, including a start up to 1 MB before it (Chrome reads 64 KB-aligned). Without this, long films with the index at the end never start.
 - **Far seeks in Direct MP4:** the player reports the target in a heartbeat *before* moving (seeks over 60 s), and reloads the source if a range is refused anyway. A plain `<video>` never retries a refused range.
@@ -103,7 +103,8 @@ Still open from that review (low risk on a server with few trusted accounts):
 | 2b86700 | 0.3.7: subtitles follow their files; ffmpeg detection under open_basedir |
 | 514311e | 0.3.8: invitation email designer; the picker's Choose button |
 | 8b34672 | Dev skill lessons and test scripts |
-| (this commit) | 0.3.10: ffmpeg opens only plain media containers; playback budget per invite |
+| d5998b4 | 0.3.10: ffmpeg opens only plain media containers; playback budget per invite |
+| (this commit) | 0.3.11: "Welcome back" resume dialog in the viewer; playhead also saved when the page is hidden |
 
 ## Production (details outside the repo)
 

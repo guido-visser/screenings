@@ -101,6 +101,7 @@ class PublicController extends Controller {
 			return $this->render($response, $token, 'not_ready', $screening, $invite);
 		}
 
+		$resumeAt = $this->sessions->resumePosition($invite, ($screening->getDurationMs() ?? 0) / 1000);
 		$session = $this->sessions->start($invite, $this->request, $response);
 		$this->events->log($screening->getId(), $invite->getId(), $session->getId(), EventLogger::SESSION_START);
 
@@ -111,6 +112,7 @@ class PublicController extends Controller {
 		$response->setContentSecurityPolicy($policy);
 
 		$playback = $this->stream->playerConfig(new StreamContext($session, $invite, $screening), $this->request);
+		$playback['resumeAt'] = $resumeAt;
 		return $this->render($response, $token, 'ready', $screening, $invite, $playback);
 	}
 

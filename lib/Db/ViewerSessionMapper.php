@@ -46,6 +46,27 @@ class ViewerSessionMapper extends QBMapper {
 	}
 
 	/**
+	 * The invite's most recently active session that got past the opening
+	 * seconds, for "continue where you left off".
+	 */
+	public function findLastWatched(int $inviteId, float $minPositionS): ?ViewerSession {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('invite_id', $qb->createNamedParameter($inviteId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->gte('last_position_s', $qb->createNamedParameter($minPositionS)))
+			->andWhere($qb->expr()->isNotNull('last_heartbeat_at'))
+			->orderBy('last_heartbeat_at', 'DESC')
+			->addOrderBy('id', 'DESC')
+			->setMaxResults(1);
+		try {
+			return $this->findEntity($qb);
+		} catch (DoesNotExistException) {
+			return null;
+		}
+	}
+
+	/**
 	 * Ends every still-open session of an invite.
 	 */
 	public function endOpenForInvite(int $inviteId, int $now): void {

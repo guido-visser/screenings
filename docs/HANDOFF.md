@@ -43,6 +43,7 @@ The original plan (8 phases) is in [PLAN.md](PLAN.md). Some details changed alon
 
 - **Running in production** on Guido's own Nextcloud (NC 35, no ffmpeg). It's updated by building with `build/package.sh`, replacing the app folder and running `occ upgrade`. Access details are not kept in this repo.
 - **Fixed: Direct MP4 with the index at the end didn't play** for long films. Chrome reads the index from a 64 KB-aligned offset just before it, which the playhead window refused (`ahead`). `StreamService::indexReadEnd()` now allows a start up to 1 MB before the index and cuts the response off at its end. Short test files never showed this, because their end falls inside the window anyway.
+- **Fixed: far seeks in a Direct MP4 broke playback.** The browser fetches the new position before the seek's heartbeat reaches the server, gets `ahead`, and a plain `<video>` never retries. The player now reports far seeks (> 60 s) first and then moves (`seekTo`), and if a range is refused anyway it reloads the source at the same spot (`onVideoError`, up to 3 times). To reproduce the race locally, delay `/heartbeat` fetches in the page by about 3 s.
 - **Tracking notice per screening** (`tracking_notice_enabled`, `tracking_notice`; `Service/TrackingNotice`). Default text "Your viewing behaviour is tracked."; null means the default. Used on the viewer page and in the invitation email.
 
 ## Open items

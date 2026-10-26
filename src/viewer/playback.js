@@ -50,6 +50,15 @@ export class Heartbeat {
 		return this.inFlight
 	}
 
+	/**
+	 * Like beat(), but the state is read after any request already in flight,
+	 * so the server is sure to get the state as it is now.
+	 */
+	async beatFresh() {
+		await this.inFlight
+		return this.beat()
+	}
+
 	async send() {
 		const state = this.getState()
 		let response

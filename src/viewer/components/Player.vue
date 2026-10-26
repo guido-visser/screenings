@@ -27,6 +27,7 @@
 			@volumechange="onVolumeChange"
 			@seeking="onSeeking"
 			@seeked="onSeeked"
+			@error="onVideoError"
 			@waiting="onWaiting"
 			@playing="onBufferingEnd"
 			@canplay="onBufferingEnd">
@@ -173,6 +174,14 @@ const ranges = new RangeRecorder()
 let seekFrom = null
 let bufferingSince = null
 let ready = false
+// Direct MP4: a seek target already reported to the server, before the
+// browser moves there (see seekTo), and recoveries from refused ranges.
+let pendingSeek = null
+let seekSeq = 0
+let mp4Recoveries = 0
+/** Seeks closer than this stay inside the server's playhead window anyway. */
+const MP4_NEAR_SECONDS = 60
+const MP4_MAX_RECOVERIES = 3
 
 const position = () => video.value?.currentTime ?? 0
 
@@ -221,7 +230,7 @@ function playerState() {
 	const v = video.value
 	const level = qualities.value.find((q) => q.index === currentLevel.value)
 	return {
-		position: v ? v.currentTime : 0,
+		position: pendingSeek ?? (v ? v.currentTime : 0),
 		playing: v ? !v.paused && !v.ended : false,
 		subtitle: subtitle.value || null,
 		quality: props.playback.mode === 'hls' ? (level?.label ?? 'auto') : 'source',
@@ -333,12 +342,59 @@ function togglePlay() {
 	}
 }
 
-function seekTo(seconds) {
+async function seekTo(seconds) {
 	const v = video.value
 	if (!v || !Number.isFinite(seconds)) {
 		return
 	}
-	v.currentTime = Math.max(0, Math.min(seconds, duration.value || seconds))
+	const target = Math.max(0, Math.min(seconds, duration.value || seconds))
+	const seq = ++seekSeq
+	if (props.playback.mode !== 'hls' && Math.abs(target - v.currentTime) > MP4_NEAR_SECONDS) {
+		// The browser fetches the new position at once and, unlike hls.js,
+		// never retries a refused range. So tell the server first.
+		pendingSeek = target
+		currentTime.value = target
+		await heartbeat.beatFresh()
+		if (seq !== seekSeq || stopReason.value) {
+			// A newer seek (e.g. still dragging) takes over.
+			return
+		}
+		pendingSeek = null
+	}
+	v.currentTime = target
+}
+
+/**
+ * Direct MP4 only: a refused range (a seek that raced its heartbeat) ends the
+ * browser's media pipeline for good. Reload the source and continue at the
+ * same spot, a few times at most.
+ */
+async function onVideoError() {
+	const v = video.value
+	if (props.playback.mode === 'hls' || stopReason.value || !v?.error) {
+		return
+	}
+	if (mp4Recoveries >= MP4_MAX_RECOVERIES) {
+		tracker.track('error', position(), { reason: 'media_error_' + v.error.code })
+		stop('error')
+		return
+	}
+	mp4Recoveries++
+	const at = pendingSeek ?? currentTime.value
+	const resume = playing.value
+	pendingSeek = at
+	await heartbeat.beatFresh()
+	pendingSeek = null
+	if (stopReason.value) {
+		return
+	}
+	v.addEventListener('loadedmetadata', () => {
+		v.currentTime = at
+		if (resume) {
+			v.play().catch(() => {})
+		}
+	}, { once: true })
+	v.src = props.playback.src
 }
 
 function seekBy(delta) {
@@ -359,6 +415,7 @@ function onSeeked() {
 	const to = position()
 	tracker.track('seeked', to, { from: Math.round((seekFrom ?? 0) * 10) / 10, to: Math.round(to * 10) / 10 })
 	seekFrom = null
+	mp4Recoveries = 0
 }
 
 function onLoadedMetadata() {
@@ -376,8 +433,9 @@ function onPlay() {
 function onPause() {
 	playing.value = false
 	ranges.close()
-	// "ended" also pauses; that is tracked separately.
-	if (!video.value.ended) {
+	// "ended" also pauses; that is tracked separately. A media error pauses
+	// too, but the viewer didn't.
+	if (!video.value.ended && !video.value.error) {
 		tracker.track('pause', position())
 	}
 }

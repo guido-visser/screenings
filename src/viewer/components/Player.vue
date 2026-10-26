@@ -5,8 +5,8 @@
 		tabindex="0"
 		@contextmenu.prevent
 		@dragstart.prevent
-		@mousemove="wake"
-		@touchstart.passive="wake"
+		@pointermove="wake"
+		@pointerdown="wake"
 		@keydown="onKey">
 		<video ref="video"
 			class="player__video"
@@ -32,6 +32,7 @@
 			@playing="onBufferingEnd"
 			@canplay="onBufferingEnd">
 			<track v-for="subtitle in playback.subtitles"
+				:id="'subtitle-' + subtitle.id"
 				:key="subtitle.id"
 				kind="subtitles"
 				:src="subtitle.src"
@@ -75,10 +76,10 @@
 				<button class="player__button" :aria-label="playing ? t('screenings', 'Pause') : t('screenings', 'Play')" @click="togglePlay">
 					<svg viewBox="0 0 24 24"><path :d="playing ? mdiPause : mdiPlay" /></svg>
 				</button>
-				<button class="player__button" :aria-label="t('screenings', 'Back 10 seconds')" @click="seekBy(-10)">
+				<button class="player__button player__button--skip" :aria-label="t('screenings', 'Back 10 seconds')" @click="seekBy(-10)">
 					<svg viewBox="0 0 24 24"><path :d="mdiRewind10" /></svg>
 				</button>
-				<button class="player__button" :aria-label="t('screenings', 'Forward 10 seconds')" @click="seekBy(10)">
+				<button class="player__button player__button--skip" :aria-label="t('screenings', 'Forward 10 seconds')" @click="seekBy(10)">
 					<svg viewBox="0 0 24 24"><path :d="mdiFastForward10" /></svg>
 				</button>
 				<button class="player__button" :aria-label="muted ? t('screenings', 'Unmute') : t('screenings', 'Mute')" @click="toggleMute">
@@ -98,7 +99,7 @@
 					<svg viewBox="0 0 24 24" aria-hidden="true"><path :d="mdiSubtitlesOutline" /></svg>
 					<select :value="subtitle" :aria-label="t('screenings', 'Subtitles')" @change="setSubtitle($event.target.value)">
 						<option value="">{{ t('screenings', 'Off') }}</option>
-						<option v-for="s in playback.subtitles" :key="s.id" :value="s.lang">
+						<option v-for="s in playback.subtitles" :key="s.id" :value="String(s.id)">
 							{{ s.label }}
 						</option>
 					</select>
@@ -155,7 +156,10 @@ const duration = ref((props.screening.durationMs ?? 0) / 1000)
 const bufferedEnd = ref(0)
 const volume = ref(1)
 const muted = ref(false)
-const subtitle = ref(props.playback.subtitles.find((s) => s.isDefault)?.lang ?? '')
+// The chosen track's id ('' = off). Several tracks may share a language
+// (e.g. "English" and "English (SDH)"); tracking still reports the language.
+const subtitle = ref(String(props.playback.subtitles.find((s) => s.isDefault)?.id ?? ''))
+const subtitleLang = (id) => props.playback.subtitles.find((s) => String(s.id) === id)?.lang ?? null
 const qualities = ref([])
 const quality = ref('auto')
 const currentLevel = ref(-1)
@@ -232,7 +236,7 @@ function playerState() {
 	return {
 		position: pendingSeek ?? (v ? v.currentTime : 0),
 		playing: v ? !v.paused && !v.ended : false,
-		subtitle: subtitle.value || null,
+		subtitle: subtitleLang(subtitle.value),
 		quality: props.playback.mode === 'hls' ? (level?.label ?? 'auto') : 'source',
 		ranges: ranges.take(),
 	}
@@ -302,13 +306,13 @@ function setupHls() {
 
 function applySubtitle() {
 	for (const track of video.value.textTracks) {
-		track.mode = track.language === subtitle.value ? 'showing' : 'disabled'
+		track.mode = subtitle.value !== '' && track.id === 'subtitle-' + subtitle.value ? 'showing' : 'disabled'
 	}
 }
 
-function setSubtitle(lang) {
-	tracker.track('subtitle_change', position(), { from: subtitle.value || null, to: lang || null })
-	subtitle.value = lang
+function setSubtitle(id) {
+	tracker.track('subtitle_change', position(), { from: subtitleLang(subtitle.value), to: subtitleLang(id) })
+	subtitle.value = id
 	applySubtitle()
 	heartbeat.beat()
 }
@@ -512,14 +516,22 @@ function onVolumeChange() {
 
 // --- Full screen, idle UI, keyboard ------------------------------------------
 
+// Safari before 16.4 (and older iPadOS) only has the webkit-prefixed API.
+const fullscreenElement = () => document.fullscreenElement ?? document.webkitFullscreenElement ?? null
+
 function toggleFullscreen() {
+	const el = container.value
 	if (fullscreen.value) {
 		exitFullscreen()
-	} else if (container.value.requestFullscreen) {
+	} else if (el.requestFullscreen) {
 		// The whole player, so the watermark and controls stay visible.
-		container.value.requestFullscreen().catch(() => {})
+		el.requestFullscreen().catch(() => {})
+	} else if (el.webkitRequestFullscreen) {
+		el.webkitRequestFullscreen()
 	} else if (video.value.webkitEnterFullscreen) {
-		// iPhone: only the video element can go full screen.
+		// iPhone: only the video element can go full screen, with the
+		// system's own player; give it its controls (see onNativeFullscreen).
+		video.value.controls = true
 		video.value.webkitEnterFullscreen()
 	}
 }
@@ -527,15 +539,27 @@ function toggleFullscreen() {
 function exitFullscreen() {
 	if (document.fullscreenElement) {
 		document.exitFullscreen().catch(() => {})
+	} else if (document.webkitFullscreenElement) {
+		document.webkitExitFullscreen()
 	}
 }
 
 function onFullscreenChange() {
-	const now = document.fullscreenElement === container.value
+	const now = fullscreenElement() === container.value
 	if (now !== fullscreen.value) {
 		tracker.track(now ? 'fullscreen_enter' : 'fullscreen_exit', position())
 	}
 	fullscreen.value = now
+	// Show the controls on the new screen, then let them fade as usual.
+	wake()
+}
+
+/** iPhone's native full screen player (webkitbeginfullscreen/webkitendfullscreen). */
+function onNativeFullscreen(event) {
+	const now = event.type === 'webkitbeginfullscreen'
+	tracker.track(now ? 'fullscreen_enter' : 'fullscreen_exit', position())
+	// Back on the page, our own controls take over again.
+	video.value.controls = now
 }
 
 // --- Page-level tracking -------------------------------------------------------
@@ -575,6 +599,11 @@ function wake() {
 	idle.value = false
 	window.clearTimeout(idleTimer)
 	idleTimer = window.setTimeout(() => {
+		// Keep the controls while the pointer rests on them.
+		if (container.value?.querySelector('.player__controls:hover')) {
+			wake()
+			return
+		}
 		idle.value = true
 	}, 2500)
 }
@@ -630,6 +659,9 @@ onMounted(() => {
 		watermarkTimer = window.setInterval(moveWatermark, 15000)
 	}
 	document.addEventListener('fullscreenchange', onFullscreenChange)
+	document.addEventListener('webkitfullscreenchange', onFullscreenChange)
+	video.value.addEventListener('webkitbeginfullscreen', onNativeFullscreen)
+	video.value.addEventListener('webkitendfullscreen', onNativeFullscreen)
 	wake()
 })
 
@@ -641,6 +673,7 @@ onBeforeUnmount(() => {
 	window.clearTimeout(idleTimer)
 	window.clearTimeout(volumeTimer)
 	document.removeEventListener('fullscreenchange', onFullscreenChange)
+	document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
 	document.removeEventListener('visibilitychange', onVisibilityChange)
 	window.removeEventListener('blur', onBlur)
 	window.removeEventListener('focus', onFocus)

@@ -67,6 +67,22 @@ docker compose exec -u www-data nextcloud php occ screenings:process-media <scre
 
 Add `--force` to process media that is already ready or failed.
 
+## Subtitles
+
+Subtitle files next to the video are added automatically when a screening is created or its video is changed, the way media players pick them up: `.srt` or `.vtt` files named like the video, plus a language and optional flags.
+
+| File next to `film.mp4` | Shows as |
+|---|---|
+| `film.en.srt`, `film.eng.srt`, `film.English.srt` | English |
+| `film.nl.srt`, `film.Nederlands.srt` | Nederlands |
+| `film.pt-BR.vtt` | Português (Brasil) |
+| `film.en.sdh.srt` (also `.cc`, `.hi`) | English (SDH) |
+| `film.nl.forced.srt` | Nederlands (forced) |
+| `film.en.default.srt` | English, switched on by default |
+| `film.srt` | Subtitles |
+
+Files with any other word after the video's name are ignored (`film-trailer.en.srt` belongs to another video). For existing screenings, use **Add subtitles from the video's folder** in Settings; it only adds what isn't there yet. You can still upload subtitles by hand.
+
 ## Tracking and the dashboard
 
 Each screening has a **Dashboard** tab that shows:

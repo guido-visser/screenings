@@ -17,6 +17,7 @@ use OCP\Files\IRootFolder;
 use OCP\Files\NotFoundException as FileNotFoundException;
 use OCP\IDBConnection;
 use OCP\Security\IHasher;
+use Psr\Log\LoggerInterface;
 
 class ScreeningService {
 	public const MAX_TITLE = 255;
@@ -34,6 +35,7 @@ class ScreeningService {
 		private ScreeningMapper $mapper,
 		private InviteMapper $inviteMapper,
 		private SubtitleService $subtitles,
+		private SubtitleImporter $subtitleImporter,
 		private TrackingCleanupService $cleanup,
 		private DeliveryModes $modes,
 		private MediaService $media,
@@ -42,6 +44,7 @@ class ScreeningService {
 		private IRootFolder $rootFolder,
 		private ITimeFactory $time,
 		private IDBConnection $db,
+		private LoggerInterface $logger,
 	) {
 	}
 
@@ -103,6 +106,7 @@ class ScreeningService {
 		}
 		$screening = $this->mapper->insert($screening);
 		$this->media->queueIfPending($screening);
+		$this->importSubtitles($screening);
 		return $screening;
 	}
 
@@ -112,6 +116,7 @@ class ScreeningService {
 	 */
 	public function update(int $id, string $uid, array $data): Screening {
 		$screening = $this->get($id, $uid);
+		$previousSource = $screening->getSourceFileId();
 		// Validate everything before touching media, so a rejected update
 		// never discards already processed media.
 		$mediaChanged = $this->apply($screening, $data, $uid);
@@ -121,6 +126,9 @@ class ScreeningService {
 		$screening->setUpdatedAt($this->time->getTime());
 		$screening = $this->mapper->update($screening);
 		$this->media->queueIfPending($screening);
+		if ($screening->getSourceFileId() !== $previousSource) {
+			$this->importSubtitles($screening);
+		}
 		return $screening;
 	}
 
@@ -170,6 +178,21 @@ class ScreeningService {
 		} catch (\Throwable $e) {
 			$this->db->rollBack();
 			throw $e;
+		}
+	}
+
+	/**
+	 * Picks up subtitle files next to a newly chosen video. A subtitle
+	 * problem never fails creating or saving the screening.
+	 */
+	private function importSubtitles(Screening $screening): void {
+		if ($screening->getSourceFileId() === null) {
+			return;
+		}
+		try {
+			$this->subtitleImporter->importSiblings($screening);
+		} catch (\Throwable $e) {
+			$this->logger->warning('Adding subtitles next to the video of screening ' . $screening->getId() . ' failed', ['exception' => $e]);
 		}
 	}
 

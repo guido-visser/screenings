@@ -93,6 +93,7 @@ body#body-public #content.app-public {
 /* --- Player ---------------------------------------------------------------- */
 
 .player {
+	container: player / inline-size;
 	position: relative;
 	aspect-ratio: 16 / 9;
 	margin: 24px 0 16px;
@@ -346,6 +347,8 @@ body#body-public #content.app-public {
 
 .player__select {
 	display: flex;
+	flex-shrink: 1;
+	min-width: 0;
 	align-items: center;
 	gap: 2px;
 	height: 40px;
@@ -375,14 +378,39 @@ body#body-public #content.app-public {
 	color: #000;
 }
 
-@media (max-width: 600px) {
-	.player__volume,
-	.player__button[aria-label*="10"] {
+/*
+ * Narrow players (phones, small windows): drop the least needed controls by
+ * the player's own width, so the bar never runs past its edges. Seeking by
+ * 10 s still works with the keyboard and the seek bar.
+ */
+@container player (max-width: 720px) {
+	.player__volume {
 		display: none;
 	}
 
 	.player__select select {
 		max-width: 72px;
+	}
+}
+
+@container player (max-width: 520px) {
+	.player__button--skip,
+	.player__select svg {
+		display: none;
+	}
+
+	.player__bar {
+		gap: 0;
+	}
+
+	.player__button {
+		width: 36px;
+		height: 36px;
+		padding: 6px;
+	}
+
+	.player__time {
+		margin-left: 4px;
 	}
 }
 

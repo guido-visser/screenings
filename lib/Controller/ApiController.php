@@ -11,6 +11,7 @@ use OCA\Screenings\Exception\NotFoundException;
 use OCA\Screenings\Exception\ValidationException;
 use OCA\Screenings\Service\InviteService;
 use OCA\Screenings\Service\ScreeningService;
+use OCA\Screenings\Service\SubtitleImporter;
 use OCA\Screenings\Service\SubtitleService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
@@ -34,6 +35,7 @@ class ApiController extends Controller {
 		private IUserSession $userSession,
 		private ScreeningService $screenings,
 		private SubtitleService $subtitles,
+		private SubtitleImporter $subtitleImporter,
 		private InviteService $invites,
 	) {
 		parent::__construct(Application::APP_ID, $request);
@@ -61,7 +63,8 @@ class ApiController extends Controller {
 	public function createScreening(): JSONResponse {
 		return $this->handle(function () {
 			$screening = $this->screenings->create($this->uid(), $this->body());
-			return $this->screenings->toArray($screening);
+			// Subtitles next to the video may have been added.
+			return $this->screenings->toArray($screening) + ['subtitles' => $this->subtitles->listForScreening($screening->getId())];
 		}, Http::STATUS_CREATED);
 	}
 
@@ -82,7 +85,8 @@ class ApiController extends Controller {
 	public function updateScreening(int $id): JSONResponse {
 		return $this->handle(function () use ($id) {
 			$screening = $this->screenings->update($id, $this->uid(), $this->body());
-			return $this->screenings->toArray($screening);
+			// A new video may have brought subtitles from its folder.
+			return $this->screenings->toArray($screening) + ['subtitles' => $this->subtitles->listForScreening($id)];
 		});
 	}
 
@@ -122,6 +126,20 @@ class ApiController extends Controller {
 			$content = file_get_contents($file['tmp_name'], false, null, 0, SubtitleService::MAX_BYTES + 1);
 			return $this->subtitles->add($id, (string)$file['name'], (string)$content, $lang, $label);
 		}, Http::STATUS_CREATED);
+	}
+
+	/**
+	 * Adds the subtitle files next to the screening's video ("film.en.srt").
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'POST', url: '/api/screenings/{id}/subtitles/import', requirements: ['id' => '\d+'])]
+	public function importSubtitles(int $id): JSONResponse {
+		return $this->handle(function () use ($id) {
+			$screening = $this->screenings->get($id, $this->uid());
+			return $this->subtitleImporter->importSiblings($screening) + [
+				'subtitles' => $this->subtitles->listForScreening($id),
+			];
+		});
 	}
 
 	#[NoAdminRequired]

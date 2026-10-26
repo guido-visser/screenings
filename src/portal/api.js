@@ -43,6 +43,9 @@ export default {
 		form.append('label', label)
 		return (await axios.post(url(`/screenings/${screeningId}/subtitles`), form)).data
 	},
+	async importSubtitles(screeningId) {
+		return (await axios.post(url(`/screenings/${screeningId}/subtitles/import`))).data
+	},
 	async updateSubtitle(id, data) {
 		return (await axios.put(url(`/subtitles/${id}`), data)).data
 	},

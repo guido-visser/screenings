@@ -138,7 +138,7 @@
 				</div>
 			</form>
 
-			<SubtitlesSection :screening-id="screening.id" :subtitles="screening.subtitles" />
+			<SubtitlesSection :screening-id="screening.id" :subtitles="screening.subtitles" :has-source="screening.sourceFileId !== null" />
 			<InvitesSection :screening-id="screening.id"
 				:invites="screening.invites"
 				:has-password="screening.hasPassword"

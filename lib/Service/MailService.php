@@ -8,16 +8,21 @@ use OCA\Screenings\AppInfo\Application;
 use OCA\Screenings\Db\Invite;
 use OCA\Screenings\Db\Screening;
 use OCA\Screenings\Exception\ValidationException;
+use OCA\Screenings\Mail\MailTemplateService;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IL10N;
 use OCP\IURLGenerator;
 use OCP\IUserManager;
 use OCP\Mail\IMailer;
+use OCP\Mail\IMessage;
 use OCP\Util;
 use Psr\Log\LoggerInterface;
 
 /**
  * Invitation and one-time-code emails. They are sent from the server's
- * address in the owner's name, with replies going to the owner.
+ * address in the owner's name, with replies going to the owner. The
+ * invitation uses the owner's own design (MailTemplateService); the code
+ * email keeps Nextcloud's standard layout.
  */
 class MailService {
 	public const MAX_MESSAGE = 2000;
@@ -28,6 +33,8 @@ class MailService {
 		private IURLGenerator $urlGenerator,
 		private IL10N $l,
 		private TrackingNotice $trackingNotice,
+		private MailTemplateService $templates,
+		private ITimeFactory $time,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -37,44 +44,94 @@ class MailService {
 	}
 
 	/**
+	 * Sends the invitation in the screening's email design (see MailTemplateService).
+	 *
 	 * @throws ValidationException when the mail could not be sent
 	 */
 	public function sendInvitation(Screening $screening, Invite $invite, string $personalMessage = ''): void {
-		$owner = $this->ownerName($screening);
-		$link = $this->publicLink($invite->getToken());
+		$design = $this->templates->resolve($screening);
+		$values = $this->invitationValues($screening, $invite->getName(), $invite->getEmail(), $this->publicLink($invite->getToken()), $personalMessage);
+		$mail = MailTemplateService::render($design['subject'], $design['html'], $values);
+		$this->sendRendered($screening, $invite->getEmail(), $invite->getName(), $mail);
+	}
 
-		$template = $this->mailer->createEMailTemplate('screenings.Invitation', [
-			'screening' => $screening->getTitle(),
-			'owner' => $owner,
-		]);
-		$template->setSubject($this->l->t('%1$s invited you to a private screening of "%2$s"', [$owner, $screening->getTitle()]));
-		$template->addHeader();
-		$template->addHeading($this->l->t('A private screening for you'));
-		$template->addBodyText($this->l->t('Hello %1$s, %2$s invited you to watch "%3$s".', [$invite->getName(), $owner, $screening->getTitle()]));
+	/**
+	 * A design filled with example viewer data (and the screening's own
+	 * details, if given), for the editor's preview.
+	 *
+	 * @return array{subject: string, html: string, text: string}
+	 * @throws ValidationException
+	 */
+	public function preview(string $uid, ?Screening $screening, string $subject, string $html): array {
+		return MailTemplateService::render($subject, $html, $this->sampleValues($uid, $screening));
+	}
 
-		$personalMessage = trim($personalMessage);
-		if ($personalMessage !== '') {
-			$template->addBodyText(htmlspecialchars($personalMessage), $personalMessage);
+	/**
+	 * Sends the preview to the owner.
+	 *
+	 * @return string the address it went to
+	 * @throws ValidationException
+	 */
+	public function sendTest(string $uid, ?Screening $screening, string $subject, string $html): string {
+		$user = $this->userManager->get($uid);
+		$email = $user?->getEMailAddress();
+		if (!$email) {
+			throw new ValidationException($this->l->t('Set an email address in your personal settings to receive test emails.'));
 		}
-		if ($screening->getDescription()) {
-			$template->addBodyText(htmlspecialchars($screening->getDescription()), $screening->getDescription());
-		}
-		if ($screening->getPasswordHash() !== null) {
-			$template->addBodyText($this->l->t('The screening is protected with a password, which %s will give you separately.', [$owner]));
-		}
-		if ($screening->getExpiresAt() !== null) {
-			$template->addBodyText($this->l->t('The link works until %s.', [$this->l->l('datetime', $screening->getExpiresAt())]));
-		}
-		$template->addBodyButton($this->l->t('Watch the screening'), $link);
-		$template->addBodyText($this->l->t('This link is personal; please do not forward it.'));
-		// Same notice as on the screening page, so the mail never promises less tracking than there is.
-		$notice = $this->trackingNotice->text($screening);
-		if ($notice !== null) {
-			$template->addBodyText($notice);
-		}
-		$template->addFooter();
+		$mail = $this->preview($uid, $screening, $subject, $html);
+		$mail['subject'] = '[Test] ' . $mail['subject'];
+		$this->sendRendered($screening ?? $this->placeholderScreening($uid), $email, $user->getDisplayName(), $mail);
+		return $email;
+	}
 
-		$this->send($screening, $invite->getEmail(), $invite->getName(), $template);
+	/**
+	 * @return array<string, string|bool|null>
+	 */
+	private function invitationValues(Screening $screening, string $name, string $email, string $link, string $message): array {
+		$durationMs = $screening->getDurationMs();
+		return [
+			'title' => $screening->getTitle(),
+			'description' => (string)$screening->getDescription(),
+			'duration' => $durationMs ? max(1, (int)round($durationMs / 60000)) . ' min' : '',
+			'owner' => $this->ownerName($screening),
+			'owner_email' => (string)$this->userManager->get($screening->getOwnerUid())?->getEMailAddress(),
+			'name' => $name,
+			'email' => $email,
+			'link' => $link,
+			'message' => trim($message),
+			'expires' => $screening->getExpiresAt() !== null ? (string)$this->l->l('datetime', $screening->getExpiresAt()) : '',
+			'password' => $screening->getPasswordHash() !== null,
+			'tracking_notice' => (string)$this->trackingNotice->text($screening),
+		];
+	}
+
+	/**
+	 * @return array<string, string|bool|null>
+	 */
+	private function sampleValues(string $uid, ?Screening $screening): array {
+		$values = $this->invitationValues(
+			$screening ?? $this->placeholderScreening($uid),
+			'Alex Example',
+			'alex@example.com',
+			$this->publicLink('preview0000000000000000000000000'),
+			'This is where the personal message appears that you can write when you send an invitation.',
+		);
+		if ($screening === null) {
+			// The default design: show every optional part once.
+			$values['expires'] = (string)$this->l->l('datetime', $this->time->getTime() + 14 * 86400);
+			$values['duration'] = '26 min';
+		}
+		return $values;
+	}
+
+	/** An unsaved screening with example details, for previews of the default design. */
+	private function placeholderScreening(string $uid): Screening {
+		$screening = new Screening();
+		$screening->setOwnerUid($uid);
+		$screening->setTitle('Your film');
+		$screening->setDescription('The description of the screening appears here.');
+		$screening->setTrackingNoticeEnabled(true);
+		return $screening;
 	}
 
 	/**
@@ -93,6 +150,23 @@ class MailService {
 	}
 
 	private function send(Screening $screening, string $email, string $name, $template): void {
+		$message = $this->newMessage($screening, $email, $name);
+		$message->useTemplate($template);
+		$this->deliver($message, $email);
+	}
+
+	/**
+	 * @param array{subject: string, html: string, text: string} $mail
+	 */
+	private function sendRendered(Screening $screening, string $email, string $name, array $mail): void {
+		$message = $this->newMessage($screening, $email, $name);
+		$message->setSubject($mail['subject']);
+		$message->setHtmlBody($mail['html']);
+		$message->setPlainBody($mail['text']);
+		$this->deliver($message, $email);
+	}
+
+	private function newMessage(Screening $screening, string $email, string $name): IMessage {
 		$message = $this->mailer->createMessage();
 		$message->setFrom([Util::getDefaultEmailAddress('noreply') => $this->l->t('%s via Screenings', [$this->ownerName($screening)])]);
 		$ownerEmail = $this->userManager->get($screening->getOwnerUid())?->getEMailAddress();
@@ -100,8 +174,10 @@ class MailService {
 			$message->setReplyTo([$ownerEmail => $this->ownerName($screening)]);
 		}
 		$message->setTo([$email => $name]);
-		$message->useTemplate($template);
+		return $message;
+	}
 
+	private function deliver(IMessage $message, string $email): void {
 		try {
 			$failed = $this->mailer->send($message);
 		} catch (\Throwable $e) {

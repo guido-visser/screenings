@@ -22,11 +22,26 @@
 					</template>
 				</NcAppNavigationItem>
 			</template>
+			<template #footer>
+				<ul class="app-navigation-entry__settings">
+					<NcAppNavigationItem :name="t('screenings', 'Invitation email')"
+						href="#/email"
+						:active="route.view === 'email' && selectedId === null">
+						<template #icon>
+							<NcIconSvgWrapper :path="mdiEmailEditOutline" />
+						</template>
+					</NcAppNavigationItem>
+				</ul>
+			</template>
 		</NcAppNavigation>
 
 		<NcAppContent>
 			<div v-if="loading" class="screenings-loading">
 				<NcLoadingIcon :size="44" />
+			</div>
+			<div v-else-if="route.view === 'email' && selectedId === null" class="screenings-email">
+				<h2>{{ t('screenings', 'Invitation email') }}</h2>
+				<MailTemplateEditor :screening-id="null" />
 			</div>
 			<ScreeningView v-else-if="selectedId !== null"
 				:key="selectedId"
@@ -65,7 +80,7 @@
 </template>
 
 <script setup>
-import { mdiMovieOpenOutline, mdiPlus } from '@mdi/js'
+import { mdiEmailEditOutline, mdiMovieOpenOutline, mdiPlus } from '@mdi/js'
 import { showError } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
 import NcAppContent from '@nextcloud/vue/components/NcAppContent'
@@ -82,6 +97,7 @@ import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import api, { errorMessage } from './api.js'
+import MailTemplateEditor from './components/MailTemplateEditor.vue'
 import ScreeningView from './components/ScreeningView.vue'
 import { navigate, parseHash, screeningHash } from './router.js'
 
@@ -164,5 +180,18 @@ onBeforeUnmount(() => window.removeEventListener('hashchange', onHashChange))
 	display: flex;
 	justify-content: center;
 	padding-top: 20vh;
+}
+
+/* Same frame as a screening's pages. */
+.screenings-email {
+	max-width: 1200px;
+	padding: 16px 24px 48px 56px;
+}
+
+.screenings-email h2 {
+	margin: 0;
+	min-height: 44px;
+	display: flex;
+	align-items: center;
 }
 </style>

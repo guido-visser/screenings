@@ -76,4 +76,21 @@ export default {
 	async deleteInvite(id) {
 		await axios.delete(url(`/invites/${id}`))
 	},
+
+	// Invitation email design: screeningId null is the owner's default.
+	async getMailTemplate(screeningId) {
+		return (await axios.get(url('/mail-template'), { params: screeningId === null ? {} : { screeningId } })).data
+	},
+	async saveMailTemplate(screeningId, subject, html) {
+		return (await axios.put(url('/mail-template'), { screeningId, subject, html })).data
+	},
+	async resetMailTemplate(screeningId) {
+		return (await axios.delete(url('/mail-template'), { params: screeningId === null ? {} : { screeningId } })).data
+	},
+	async previewMailTemplate(screeningId, subject, html) {
+		return (await axios.post(url('/mail-template/preview'), { screeningId, subject, html })).data
+	},
+	async sendTestMail(screeningId, subject, html) {
+		return (await axios.post(url('/mail-template/test'), { screeningId, subject, html })).data
+	},
 }

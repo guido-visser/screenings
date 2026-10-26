@@ -7,17 +7,13 @@
 			<header class="screening__header">
 				<h2>{{ screening.title }}</h2>
 				<nav class="screening__tabs" :aria-label="t('screenings', 'Screening sections')">
-					<a :href="screeningHash(screening.id, 'dashboard')"
+					<a v-for="tab in tabs"
+						:key="tab.view"
+						:href="screeningHash(screening.id, tab.view)"
 						class="screening__tab"
-						:class="{ 'screening__tab--active': view !== 'settings' }"
-						:aria-current="view !== 'settings' ? 'page' : undefined">
-						{{ t('screenings', 'Dashboard') }}
-					</a>
-					<a :href="screeningHash(screening.id, 'settings')"
-						class="screening__tab"
-						:class="{ 'screening__tab--active': view === 'settings' }"
-						:aria-current="view === 'settings' ? 'page' : undefined">
-						{{ t('screenings', 'Settings') }}
+						:class="{ 'screening__tab--active': tab.active }"
+						:aria-current="tab.active ? 'page' : undefined">
+						{{ tab.label }}
 					</a>
 				</nav>
 				<NcActions>
@@ -31,6 +27,7 @@
 			</header>
 
 			<DashboardView v-if="view === 'dashboard'" :screening="screening" />
+			<MailTemplateEditor v-else-if="view === 'email'" :screening-id="screening.id" />
 			<ViewerDetail v-else-if="view === 'viewer'"
 				:key="inviteId"
 				:screening="screening"
@@ -170,13 +167,14 @@ import HlsHelp from './HlsHelp.vue'
 import InvitesSection from './InvitesSection.vue'
 import { screeningHash } from '../router.js'
 import DashboardView from './DashboardView.vue'
+import MailTemplateEditor from './MailTemplateEditor.vue'
 import MediaStatus from './MediaStatus.vue'
 import SubtitlesSection from './SubtitlesSection.vue'
 import ViewerDetail from './ViewerDetail.vue'
 
 const props = defineProps({
 	screeningId: { type: Number, required: true },
-	/** "dashboard", "settings" or "viewer" */
+	/** "dashboard", "settings", "email" or "viewer" */
 	view: { type: String, default: 'dashboard' },
 	inviteId: { type: Number, default: null },
 })
@@ -223,6 +221,13 @@ function videoFilter(mode) {
 		return node.mime?.startsWith('video/') || VIDEO_EXTENSIONS.includes(node.extension?.replace('.', '').toLowerCase())
 	}
 }
+
+const tabs = computed(() => [
+	// A viewer's activity belongs to the dashboard.
+	{ view: 'dashboard', label: t('screenings', 'Dashboard'), active: props.view === 'dashboard' || props.view === 'viewer' },
+	{ view: 'settings', label: t('screenings', 'Settings'), active: props.view === 'settings' },
+	{ view: 'email', label: t('screenings', 'Invitation email'), active: props.view === 'email' },
+])
 
 const MEDIA_FIELDS = ['mediaStatus', 'mediaProgress', 'mediaError', 'mediaWarning', 'mediaMode', 'durationMs']
 const POLL_MS = 3000
@@ -380,6 +385,16 @@ async function pickSource() {
 	} else {
 		builder.setFilter(videoFilter(form.value.deliveryMode))
 	}
+	// Without a button the picker has no way to confirm a selection
+	// (double-clicking a file doesn't pick it either).
+	builder.setButtonFactory((nodes) => [{
+		label: nodes.length
+			? t('screenings', 'Choose {file}', { file: nodes[0].basename })
+			: t('screenings', 'Choose'),
+		variant: 'primary',
+		disabled: nodes.length === 0,
+		callback: () => {},
+	}])
 	const picker = builder.build()
 	try {
 		form.value.sourcePath = await picker.pick()

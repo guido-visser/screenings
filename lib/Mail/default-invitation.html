@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+</head>
+<body style="margin:0; padding:0; background:#0b0b0c;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b0b0c;">
+<tr><td align="center" style="padding:32px 16px;">
+	<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px; background:#17171a; border-radius:12px; font-family:Helvetica, Arial, sans-serif; color:#ececec;">
+	<tr><td style="padding:32px 32px 8px;">
+		<p style="margin:0 0 8px; color:#e8b04b; font-size:12px; letter-spacing:2px; text-transform:uppercase;">Private screening from {{owner}}</p>
+		<h1 style="margin:0; font-size:26px; line-height:1.25; font-weight:600;">{{title}}</h1>
+		{{#duration}}<p style="margin:6px 0 0; color:#9a9aa2; font-size:14px;">{{duration}}</p>{{/duration}}
+	</td></tr>
+	<tr><td style="padding:16px 32px 0; font-size:16px; line-height:1.6;">
+		<p style="margin:0 0 16px;">Hello {{name}},</p>
+		<p style="margin:0 0 16px;">{{owner}} invited you to watch <strong>{{title}}</strong>.</p>
+		{{#message}}<p style="margin:0 0 16px; padding:12px 16px; border-left:3px solid #e8b04b; background:#1f1f23;">{{message}}</p>{{/message}}
+		{{#description}}<p style="margin:0 0 16px; color:#c9c9cf;">{{description}}</p>{{/description}}
+	</td></tr>
+	<tr><td align="center" style="padding:8px 32px 24px;">
+		<a href="{{link}}" style="display:inline-block; padding:14px 28px; background:#e8b04b; color:#1a1304; font-size:16px; font-weight:600; text-decoration:none; border-radius:8px;">Watch the screening</a>
+	</td></tr>
+	<tr><td style="padding:0 32px 32px; font-size:13px; line-height:1.6; color:#9a9aa2;">
+		{{#password}}<p style="margin:0 0 8px;">The screening is protected with a password, which {{owner}} will give you separately.</p>{{/password}}
+		{{#expires}}<p style="margin:0 0 8px;">The link works until {{expires}}.</p>{{/expires}}
+		<p style="margin:0 0 8px;">This link is personal; please do not forward it.</p>
+		{{#tracking_notice}}<p style="margin:0;">{{tracking_notice}}</p>{{/tracking_notice}}
+	</td></tr>
+	</table>
+	<p style="margin:16px 0 0; font-family:Helvetica, Arial, sans-serif; font-size:12px; color:#5f5f66;">If the button doesn't work, open this address: <a href="{{link}}" style="color:#9a9aa2;">{{link}}</a></p>
+</td></tr>
+</table>
+</body>
+</html>

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\Screenings\Service;
 
 use OCA\Screenings\Db\InviteMapper;
+use OCA\Screenings\Db\MailTemplateMapper;
 use OCA\Screenings\Db\Screening;
 use OCA\Screenings\Db\ScreeningMapper;
 use OCA\Screenings\Exception\NotFoundException;
@@ -36,6 +37,7 @@ class ScreeningService {
 		private InviteMapper $inviteMapper,
 		private SubtitleService $subtitles,
 		private SubtitleImporter $subtitleImporter,
+		private MailTemplateMapper $mailTemplates,
 		private TrackingCleanupService $cleanup,
 		private DeliveryModes $modes,
 		private MediaService $media,
@@ -172,6 +174,7 @@ class ScreeningService {
 				$this->inviteMapper->delete($invite);
 			}
 			$this->subtitles->deleteAllForScreening($id);
+			$this->mailTemplates->deleteForScreening($id);
 			$this->media->deleteMedia($screening);
 			$this->mapper->delete($screening);
 			$this->db->commit();

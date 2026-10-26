@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\Screenings\Listener;
 
+use OCA\Screenings\Db\MailTemplateMapper;
 use OCA\Screenings\Db\ScreeningMapper;
 use OCA\Screenings\Service\ScreeningService;
 use OCP\EventDispatcher\Event;
@@ -21,6 +22,7 @@ class UserDeletedListener implements IEventListener {
 	public function __construct(
 		private ScreeningMapper $mapper,
 		private ScreeningService $screenings,
+		private MailTemplateMapper $mailTemplates,
 	) {
 	}
 
@@ -32,5 +34,6 @@ class UserDeletedListener implements IEventListener {
 		foreach ($this->mapper->findAllForOwner($uid) as $screening) {
 			$this->screenings->delete($screening->getId(), $uid);
 		}
+		$this->mailTemplates->deleteForOwner($uid);
 	}
 }

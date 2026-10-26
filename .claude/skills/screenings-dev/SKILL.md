@@ -117,6 +117,11 @@ D="/c/Program Files/Docker/Docker/resources/bin/docker.exe"
 - **`subtitle-events-test.sh`** (repo root): automatic subtitles via real WebDAV events, 7 steps with expected results printed.
 - **`fullscreen-check.py`**: real fullscreen of the player in headless Chrome (usage in its header; throwaway profile only).
 - **`ffmpeg-detect.php`**: what the app's ffmpeg detection finds, optionally under a production-like `open_basedir`.
+- **`demo-data.py` + `screenshots.py`** (repo root): the README demo ("Night Ferry", account `mira`, credentials `DEMO_USER`/`DEMO_PASSWORD` in `dev/.env`) and its screenshots in headless Chrome, written to `docs/screenshots/`. Usage in their headers. Things learned making them:
+  - Basic auth on page loads works for the portal only with `OCS-APIREQUEST: true` on every request; without it the page's own API calls get 401.
+  - Opening viewer links records real sessions; `screenshots.py` shoots the viewer pages first and then deletes the headless sessions, events, ranges and page opens.
+  - Each invite has a playback budget: loading the same viewer link many times in a row gets 429s and "Playback stopped". Wait a minute between runs on one invite.
+  - A very low-bitrate MP4 (plain gradients, ~160 kbit/s) runs into the budget after one jump (see HANDOFF open item); the demo film is padded to 2.5 Mbit/s. Film grain at a fixed quality instead makes files of many GB.
 - **Test fixtures in the dev admin's Files:** `/Films/auto-tests/` (safe.mp4, h264.mkv, pcm.mov, prores.mov, tenbit.mp4, dnxhr.mxf; Auto screenings 19–25), `ten-minutes.*.srt` next to `ten-minutes.mp4` (incl. a trailer and a broken file), `moov-at-end.mp4` (screening 18).
 - **`build/package.sh`** (repo root, not in `scripts/`): builds the release tarball. To check a package, run the dev image standalone with SQLite (`docker run -d --name scr-pkgtest -e SQLITE_DATABASE=nc -e NEXTCLOUD_ADMIN_USER=admin -e NEXTCLOUD_ADMIN_PASSWORD=… -e NEXTCLOUD_TRUSTED_DOMAINS=localhost -p 8090:80 screenings-dev-nextcloud`), extract the tarball into its `custom_apps/`, `occ app:enable screenings`, then remove the container.
 

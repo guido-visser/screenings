@@ -19,6 +19,7 @@ A Nextcloud app for sending tracked private screenings of a film.
 ## Open items, in order
 
 0. **Feedback feature: done** (all three phases, 2026-10-26). Small leftovers: the Feedback tab has no count badge (the dashboard tiles show the counts), and notifications stay after their invite is deleted (their links still open the tab). Not tested here: real fullscreen with the note card or the questions dialog, and deleting a whole screening with questions (same cleanup code path as notes).
+0b. **Bug: low-bitrate Direct MP4s stall** (found 2026-10-26 while making README screenshots). `StreamService::mp4Content` serves at most `MP4_CHUNK_BYTES` (2 MB) per range and charges the playback budget (180 s, refills at 3×) the chunk's duration in film seconds. At ~160 kbit/s a chunk is ~105 s of film, so starting plus one jump exceeds the budget; Chrome treats the 429 as fatal, the player retries three times and stops ("Playback stopped"). Below ~90 kbit/s a single chunk exceeds the whole budget and nothing plays. Normal screeners (2+ Mbit/s) are unaffected (a chunk is a few seconds). Fix idea: cap a chunk at a duration too, e.g. `min(MP4_CHUNK_BYTES, bytesPerSecond * 20 s)` with a small floor, so a chunk never costs more than ~20 s of budget; add a unit test for the chunk size.
 1. **Guido still has to confirm on his server** (none of these can be fully tested from here):
    - **Fullscreen controls** on Chrome 156/Windows (2560×1440). He reported them missing; they work in headless Chrome (`scripts/fullscreen-check.py`). Hardening shipped in 0.3.6: controls show on entering, stay while hovered, wake on any pointer. If still broken, ask whether moving the mouse brings them back.
    - **A real conversion** (e.g. ProRes or MKV) with the server's ffmpeg 4.2. That version supports every option the app uses (checked), but no full conversion has run there yet.
@@ -128,6 +129,9 @@ Still open from that review (low risk on a server with few trusted accounts):
 - Quirks (the `/index.php` 404 fallback, `open_basedir` on the web PHP) are in the skill.
 
 ## Dev data (local only)
+
+**README demo:** account `mira` ("Mira Koster", password in `dev/.env` as DEMO_PASSWORD) owns "Night Ferry" (screening 33) and its trailer, with five fictional viewers, notes and answers. Made by `scripts/demo-data.py`; screenshots by `scripts/screenshots.py` (see their headers). Each viewer link is limited by the playback budget, so wait a minute between scripted loads of the same invite.
+
 
 Admin login: see `dev/.env` (user `admin`, email `admin@example.test`). Mailpit: http://localhost:8025. GeoIP test database configured (mode `file`). Conversion enabled (mode `full`).
 

@@ -38,7 +38,7 @@
 				<a v-if="totals.answered || totals.questionsAsked"
 					class="tile tile--link"
 					:href="screeningHash(screening.id, 'answers')">
-					<span class="tile__label">{{ t('screenings', 'Answered the questions') }}</span>
+					<span class="tile__label">{{ t('screenings', 'Answered questions') }}</span>
 					<span class="tile__value">{{ totals.answered }}<span class="tile__of"> / {{ totals.questionsAsked }}</span></span>
 				</a>
 			</section>
@@ -268,7 +268,7 @@ onBeforeUnmount(() => {
 
 .dashboard__tiles {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
 	gap: 12px;
 }
 

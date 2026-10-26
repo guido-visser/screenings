@@ -49,6 +49,7 @@ export const EVENT_GROUPS = {
 	playback: ['play', 'pause', 'seeked', 'ended', 'subtitle_change', 'quality_change', 'volume_change', 'fullscreen_enter', 'fullscreen_exit'],
 	attention: ['visibility_hidden', 'visibility_visible', 'window_blur', 'window_focus', 'page_open', 'page_leave', 'session_start'],
 	access: ['password_ok', 'password_fail', 'otp_requested', 'otp_verified', 'otp_fail', 'access_denied'],
+	feedback: ['note_added'],
 	technical: ['player_ready', 'buffering_start', 'buffering_end', 'error', 'playback_stopped'],
 }
 
@@ -97,6 +98,9 @@ export function eventText(event) {
 	case 'window_blur': return t('screenings', 'Window lost focus')
 	case 'window_focus': return t('screenings', 'Window regained focus')
 	case 'page_leave': return t('screenings', 'Left the page')
+	case 'note_added': return d.text
+		? t('screenings', 'Left a note: {text}', { text: d.text })
+		: t('screenings', 'Left a note (since deleted)')
 	case 'playback_stopped': return t('screenings', 'Playback was stopped: {reason}', { reason: STOP_REASONS[d.reason]?.() ?? d.reason ?? '?' })
 	default: return event.type
 	}

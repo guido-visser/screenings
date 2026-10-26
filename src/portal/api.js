@@ -64,8 +64,16 @@ export default {
 		return (await axios.get(url(`/invites/${inviteId}/activity`), { params: before ? { before } : {} })).data
 	},
 
-	async createInvite(screeningId, name, email, sendEmail = false, message = '') {
-		return (await axios.post(url(`/screenings/${screeningId}/invites`), { name, email, sendEmail, message })).data
+	async createInvite(screeningId, name, email, sendEmail = false, message = '', feedback = {}) {
+		return (await axios.post(url(`/screenings/${screeningId}/invites`), { name, email, sendEmail, message, ...feedback })).data
+	},
+	/** feedback: { allowNotes?, askQuestions? }; left-out switches stay as they are. */
+	async setInviteFeedback(id, feedback) {
+		return (await axios.put(url(`/invites/${id}/feedback`), feedback)).data
+	},
+	/** The same for every personal invite; returns the screening's invites. */
+	async setAllInvitesFeedback(screeningId, feedback) {
+		return (await axios.put(url(`/screenings/${screeningId}/invites/feedback`), feedback)).data
 	},
 	async sendInvite(id, message = '') {
 		return (await axios.post(url(`/invites/${id}/send`), { message })).data

@@ -126,6 +126,40 @@ class InviteService {
 	}
 
 	/**
+	 * Turns notes and closing questions on or off; null leaves a switch as it is.
+	 *
+	 * @throws ValidationException
+	 */
+	public function setFeedback(Invite $invite, ?bool $allowNotes, ?bool $askQuestions): Invite {
+		if ($invite->getSource() === Invite::SOURCE_OPEN_LINK && ($allowNotes || $askQuestions)) {
+			throw new ValidationException("Visitors from the open link can't leave feedback");
+		}
+		if ($allowNotes !== null) {
+			$invite->setAllowNotes($allowNotes);
+		}
+		if ($askQuestions !== null) {
+			$invite->setAskQuestions($askQuestions);
+		}
+		return $this->mapper->update($invite);
+	}
+
+	/**
+	 * The same switches for every personal invite of a screening (open-link
+	 * visitors are skipped).
+	 *
+	 * @return Invite[] the screening's invites afterwards
+	 */
+	public function setFeedbackForAll(int $screeningId, ?bool $allowNotes, ?bool $askQuestions): array {
+		$invites = $this->mapper->findForScreening($screeningId);
+		foreach ($invites as $invite) {
+			if ($invite->getSource() !== Invite::SOURCE_OPEN_LINK) {
+				$this->setFeedback($invite, $allowNotes, $askQuestions);
+			}
+		}
+		return $invites;
+	}
+
+	/**
 	 * Deletes the invite with all of its tracking data.
 	 */
 	public function delete(Invite $invite): void {

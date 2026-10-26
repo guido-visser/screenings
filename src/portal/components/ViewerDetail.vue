@@ -174,6 +174,7 @@ const filters = [
 	{ id: 'playback', label: t('screenings', 'Playback') },
 	{ id: 'attention', label: t('screenings', 'Attention') },
 	{ id: 'access', label: t('screenings', 'Access') },
+	{ id: 'feedback', label: t('screenings', 'Notes') },
 	{ id: 'technical', label: t('screenings', 'Technical') },
 ]
 const allEvents = computed(() => [...(data.value?.events.items ?? []), ...older.value])
@@ -414,6 +415,14 @@ onBeforeUnmount(() => window.clearInterval(timer))
 
 .timeline__item[data-group="playback"] {
 	border-left-color: var(--color-primary-element);
+}
+
+.timeline__item[data-group="feedback"] {
+	border-left-color: var(--color-success);
+}
+
+.timeline__item[data-group="feedback"] .timeline__text {
+	white-space: pre-line;
 }
 
 .timeline__item[data-group="access"] {

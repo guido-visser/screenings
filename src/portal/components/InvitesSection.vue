@@ -1,12 +1,31 @@
 <template>
 	<section class="invites">
-		<h3>{{ t('screenings', 'Invites') }}</h3>
+		<div class="invites__header">
+			<h3>{{ t('screenings', 'Invites') }}</h3>
+			<NcActions v-if="personalInvites.length" :aria-label="t('screenings', 'Feedback for all invites')">
+				<NcActionButton close-after-click @click="setAllNotes(true)">
+					<template #icon>
+						<NcIconSvgWrapper :path="mdiCommentTextOutline" />
+					</template>
+					{{ t('screenings', 'Ask everyone for notes') }}
+				</NcActionButton>
+				<NcActionButton close-after-click @click="setAllNotes(false)">
+					<template #icon>
+						<NcIconSvgWrapper :path="mdiCommentOffOutline" />
+					</template>
+					{{ t('screenings', 'Turn notes off for everyone') }}
+				</NcActionButton>
+			</NcActions>
+		</div>
 
 		<form class="invites__add" @submit.prevent="add">
 			<div class="invites__fields">
 				<NcTextField v-model="name" :label="t('screenings', 'Name')" />
 				<NcTextField v-model="email" type="email" :label="t('screenings', 'Email')" />
 			</div>
+			<NcCheckboxRadioSwitch v-model="allowNotes">
+				{{ t('screenings', 'Let them leave notes at moments in the film') }}
+			</NcCheckboxRadioSwitch>
 			<NcCheckboxRadioSwitch v-model="sendEmail">
 				{{ t('screenings', 'Email the invitation now') }}
 			</NcCheckboxRadioSwitch>
@@ -41,6 +60,9 @@
 				<span v-if="invite.source === 'open_link'" class="invites__badge">
 					{{ t('screenings', 'Via open link') }}
 				</span>
+				<span v-if="invite.allowNotes" class="invites__badge" :title="t('screenings', 'Can leave notes')">
+					{{ t('screenings', 'Notes') }}
+				</span>
 				<span v-if="invite.revokedAt" class="invites__badge invites__badge--error">
 					{{ t('screenings', 'Revoked') }}
 				</span>
@@ -56,6 +78,11 @@
 						</template>
 						{{ invite.invitedAt ? t('screenings', 'Resend invitation') : t('screenings', 'Send invitation') }}
 					</NcActionButton>
+					<NcActionCheckbox v-if="invite.source !== 'open_link'"
+						:model-value="invite.allowNotes"
+						@update:model-value="setNotes(invite, $event)">
+						{{ t('screenings', 'Can leave notes') }}
+					</NcActionCheckbox>
 					<NcActionButton close-after-click @click="setRevoked(invite, !invite.revokedAt)">
 						<template #icon>
 							<NcIconSvgWrapper :path="invite.revokedAt ? mdiLinkVariant : mdiLinkVariantOff" />
@@ -80,6 +107,8 @@
 <script setup>
 import {
 	mdiAccountPlusOutline,
+	mdiCommentOffOutline,
+	mdiCommentTextOutline,
 	mdiContentCopy,
 	mdiDeleteOutline,
 	mdiEmailFastOutline,
@@ -90,13 +119,14 @@ import {
 import { showError, showSuccess } from '@nextcloud/dialogs'
 import { formatRelativeTime, t } from '@nextcloud/l10n'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
+import NcActionCheckbox from '@nextcloud/vue/components/NcActionCheckbox'
 import NcActions from '@nextcloud/vue/components/NcActions'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcCheckboxRadioSwitch from '@nextcloud/vue/components/NcCheckboxRadioSwitch'
 import NcIconSvgWrapper from '@nextcloud/vue/components/NcIconSvgWrapper'
 import NcTextArea from '@nextcloud/vue/components/NcTextArea'
 import NcTextField from '@nextcloud/vue/components/NcTextField'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import api, { errorMessage, publicLink } from '../api.js'
 import { copyLink } from '../clipboard.js'
 
@@ -113,6 +143,10 @@ const email = ref('')
 const sendEmail = ref(true)
 const message = ref('')
 const adding = ref(false)
+const allowNotes = ref(false)
+
+// Open-link visitors never give feedback.
+const personalInvites = computed(() => items.value.filter((i) => i.source !== 'open_link'))
 
 watch(() => items.value.length, (count) => emit('count', count))
 
@@ -129,7 +163,7 @@ function statusText(invite) {
 async function add() {
 	adding.value = true
 	try {
-		const invite = await api.createInvite(props.screeningId, name.value, email.value, sendEmail.value, message.value)
+		const invite = await api.createInvite(props.screeningId, name.value, email.value, sendEmail.value, message.value, { allowNotes: allowNotes.value })
 		items.value.unshift(invite)
 		if (invite.mailError) {
 			showError(t('screenings', 'The invite was added, but the email failed: {error}', { error: invite.mailError }))
@@ -153,6 +187,25 @@ async function send(invite) {
 		showSuccess(t('screenings', 'Invitation sent to {email}', { email: saved.email }))
 	} catch (error) {
 		showError(errorMessage(error, t('screenings', 'Could not send the invitation')))
+	}
+}
+
+async function setNotes(invite, allowed) {
+	try {
+		const saved = await api.setInviteFeedback(invite.id, { allowNotes: allowed })
+		items.value = items.value.map((i) => i.id === saved.id ? saved : i)
+	} catch (error) {
+		showError(errorMessage(error, t('screenings', 'Could not change the notes setting')))
+	}
+}
+
+async function setAllNotes(allowed) {
+	try {
+		const saved = await api.setAllInvitesFeedback(props.screeningId, { allowNotes: allowed })
+		const byId = new Map(saved.map((i) => [i.id, i]))
+		items.value = items.value.map((i) => byId.get(i.id) ?? i)
+	} catch (error) {
+		showError(errorMessage(error, t('screenings', 'Could not change the notes setting')))
 	}
 }
 
@@ -183,8 +236,15 @@ async function remove(invite) {
 	margin-top: 32px;
 }
 
+.invites__header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+
 .invites h3 {
-	margin: 0 0 12px;
+	margin: 0;
 	font-size: 1.1em;
 }
 

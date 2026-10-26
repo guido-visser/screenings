@@ -6,6 +6,7 @@ namespace OCA\Screenings\Dashboard;
 
 use OCA\Screenings\Db\Invite;
 use OCA\Screenings\Db\InviteMapper;
+use OCA\Screenings\Db\NoteMapper;
 use OCA\Screenings\Db\Screening;
 use OCA\Screenings\Db\ViewerSession;
 use OCA\Screenings\Db\ViewerSessionMapper;
@@ -27,6 +28,7 @@ class DashboardService {
 	public function __construct(
 		private InviteMapper $invites,
 		private ViewerSessionMapper $sessions,
+		private NoteMapper $notes,
 		private IDBConnection $db,
 		private ITimeFactory $time,
 	) {
@@ -318,6 +320,21 @@ class DashboardService {
 		}
 		$result->closeCursor();
 		$more = count($events) > self::EVENTS_PAGE;
-		return ['items' => array_slice($events, 0, self::EVENTS_PAGE), 'more' => $more];
+		$events = array_slice($events, 0, self::EVENTS_PAGE);
+
+		// The note's current text; the event itself only keeps its id.
+		if (array_filter($events, fn (array $e) => $e['type'] === 'note_added') !== []) {
+			$texts = [];
+			foreach ($this->notes->findForInvite($inviteId) as $note) {
+				$texts[$note->getId()] = $note->getBody();
+			}
+			foreach ($events as &$event) {
+				if ($event['type'] === 'note_added') {
+					$event['data']['text'] = $texts[(int)($event['data']['note'] ?? 0)] ?? null;
+				}
+			}
+			unset($event);
+		}
+		return ['items' => $events, 'more' => $more];
 	}
 }

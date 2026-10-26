@@ -19,7 +19,12 @@
 
 		<section v-else-if="state === 'ready'" class="viewer__screening">
 			<ScreeningHeader :screening="screening" :viewer="viewer" wide />
-			<Player :playback="playback" :screening="screening" :viewer="viewer" />
+			<Player ref="player"
+				:playback="playback"
+				:screening="screening"
+				:viewer="viewer"
+				:notes="notes" />
+			<NotesPanel v-if="notes" :notes="notes" :owner="screening.owner" @seek="seekFromNotes" />
 			<PrivacyNotice v-if="screening.trackingNotice" :text="screening.trackingNotice" />
 		</section>
 	</main>
@@ -28,16 +33,28 @@
 <script setup>
 import { loadState } from '@nextcloud/initial-state'
 import { t } from '@nextcloud/l10n'
-import { computed, defineAsyncComponent } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
 import EmailGate from './components/EmailGate.vue'
+import NotesPanel from './components/NotesPanel.vue'
 import PasswordForm from './components/PasswordForm.vue'
 import PrivacyNotice from './components/PrivacyNotice.vue'
 import ScreeningHeader from './components/ScreeningHeader.vue'
+import { createNotes } from './notes.js'
 
 // hls.js is large; only load it once there is something to play.
 const Player = defineAsyncComponent(() => import('./components/Player.vue'))
 
 const { state, token, screening, viewer, playback } = loadState('screenings', 'viewer')
+
+const player = ref(null)
+// Only for invites the owner asked for notes.
+const notes = playback?.notesUrl ? createNotes(playback.notesUrl) : null
+
+/** A note's time in the list was clicked: bring the player into view there. */
+function seekFromNotes(position) {
+	player.value?.seekTo(position)
+	document.querySelector('.player')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+}
 
 if (screening?.title) {
 	document.title = screening.title

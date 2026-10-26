@@ -101,6 +101,14 @@ Click a viewer to see their sessions (device, screen, location, IP), a heatmap o
 
 **Viewer location** is optional (*Administration settings → Screenings*). It uses a MaxMind GeoLite2/GeoIP2 City database on the server. Behind a reverse proxy, set Nextcloud's [`trusted_proxies`](https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/reverse_proxy_configuration.html) correctly, or every viewer shows the proxy's address. The IP-bound playback tokens need it too.
 
+## Viewer notes
+
+Per invite you can ask a viewer for **notes**: thoughts tied to a moment in the film. Turn it on when adding an invite ("Let them leave notes at moments in the film"), per invite in its menu ("Can leave notes"), or for everyone at once from the menu next to the Invites heading. It's off by default. Open-link visitors never get it.
+
+The viewer then sees a note button in the player (or presses **N**). The film pauses and a box opens with the time already filled in. **Enter** saves, Shift+Enter starts a new line, Esc cancels, and the film carries on where it was. The box sits inside the player, so it also works in full screen. Their notes show as markers on the seek bar and in a "My notes" list under the player, where they can jump to a note, edit it or delete it.
+
+You see each note in the viewer's activity timeline (filter **Notes**), always with its current text. Notes are kept until the invite or screening is deleted: the retention period doesn't apply to them, because the viewer gave them to you on purpose. A viewer can leave at most 60 notes per hour.
+
 ## How playback is protected
 
 Every media request (`/apps/screenings/stream/<session>/…`) must have:
@@ -117,6 +125,7 @@ Revoking an invite or reaching the expiry date stops playback within one heartbe
 ## Data retention and privacy
 
 - Each screening has a **retention period** (Settings, default 365 days). A daily background job deletes viewer sessions, watched ranges and events older than that; a session counts from its last heartbeat. Invites stay, so the guest list is kept. Expired email codes are deleted by the same job.
+- Viewer notes are not subject to the retention period; they are deleted with their invite or screening.
 - Deleting an invite or a screening deletes its tracking data immediately, and deleting a screening also deletes its encrypted media copy.
 - Deleting a Nextcloud user deletes all of their screenings, with invites, tracking data and media.
 
@@ -131,6 +140,7 @@ Revoking an invite or reaching the expiry date stops playback within one heartbe
 | Creating screenings, "Process again" | 30 per owner per hour |
 | Creating invites | 300 per owner per hour |
 | Player events | 1500 per viewer session per hour |
+| Viewer notes | 60 per invite per hour, 2000 characters each |
 
 ## Building a release
 

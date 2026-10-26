@@ -78,6 +78,10 @@ class StreamService {
 				: $route('mp4') . '?sig=' . $this->guard->mediaSignature($sid, $request, 'mp4'),
 			'heartbeatUrl' => $route('heartbeat'),
 			'eventsUrl' => $route('events'),
+			// Only for invites the owner asked for notes.
+			'notesUrl' => $ctx->invite->mayLeaveNotes()
+				? $this->urlGenerator->linkToRoute(Application::APP_ID . '.feedback.notes', ['sessionId' => $sid])
+				: null,
 			'heartbeatSeconds' => self::HEARTBEAT_SECONDS,
 			'tokenHeader' => StreamGuard::TOKEN_HEADER,
 			'subtitles' => $subtitles,

@@ -26,6 +26,10 @@ use OCP\AppFramework\Db\Entity;
  * @method void setRevokedAt(?int $revokedAt)
  * @method int getCreatedAt()
  * @method void setCreatedAt(int $createdAt)
+ * @method ?bool getAllowNotes()
+ * @method void setAllowNotes(bool $allowNotes)
+ * @method ?bool getAskQuestions()
+ * @method void setAskQuestions(bool $askQuestions)
  */
 class Invite extends Entity implements JsonSerializable {
 	public const SOURCE_INVITED = 'invited';
@@ -40,6 +44,8 @@ class Invite extends Entity implements JsonSerializable {
 	protected $invitedAt;
 	protected $revokedAt;
 	protected $createdAt;
+	protected $allowNotes;
+	protected $askQuestions;
 
 	public function __construct() {
 		$this->addType('screeningId', 'integer');
@@ -47,10 +53,24 @@ class Invite extends Entity implements JsonSerializable {
 		$this->addType('invitedAt', 'integer');
 		$this->addType('revokedAt', 'integer');
 		$this->addType('createdAt', 'integer');
+		$this->addType('allowNotes', 'boolean');
+		$this->addType('askQuestions', 'boolean');
 	}
 
 	public function isRevoked(): bool {
 		return $this->revokedAt !== null;
+	}
+
+	/**
+	 * Open-link visitors never give feedback; invited viewers only when the
+	 * owner turned it on for them.
+	 */
+	public function mayLeaveNotes(): bool {
+		return $this->source !== self::SOURCE_OPEN_LINK && (bool)$this->allowNotes;
+	}
+
+	public function mayAnswerQuestions(): bool {
+		return $this->source !== self::SOURCE_OPEN_LINK && (bool)$this->askQuestions;
 	}
 
 	public function jsonSerialize(): array {
@@ -65,6 +85,8 @@ class Invite extends Entity implements JsonSerializable {
 			'invitedAt' => $this->invitedAt,
 			'revokedAt' => $this->revokedAt,
 			'createdAt' => $this->createdAt,
+			'allowNotes' => (bool)$this->allowNotes,
+			'askQuestions' => (bool)$this->askQuestions,
 		];
 	}
 }

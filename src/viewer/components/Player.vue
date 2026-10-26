@@ -64,12 +64,43 @@
 			</div>
 		</dialog>
 
-		<button v-if="!playing && !stopReason && !started && !asking"
+		<button v-if="!playing && !stopReason && !started && !asking && !noting"
 			class="player__big-play"
 			:aria-label="t('screenings', 'Play')"
 			@click="togglePlay">
 			<svg viewBox="0 0 24 24"><path :d="mdiPlay" /></svg>
 		</button>
+
+		<form v-if="noting"
+			class="player__note"
+			@submit.prevent="saveNote"
+			@click.stop
+			@keydown.stop="onNoteKey">
+			<label for="player-note-text" class="player__note-label">
+				{{ t('screenings', 'Note at {time}', { time: formatTime(noteAt) }) }}
+			</label>
+			<textarea id="player-note-text"
+				ref="noteInput"
+				v-model="noteText"
+				rows="3"
+				maxlength="2000"
+				:placeholder="t('screenings', 'What do you notice at this moment?')" />
+			<p v-if="noteError" class="player__note-error" role="alert">
+				{{ noteError }}
+			</p>
+			<div class="player__note-actions">
+				<span class="player__note-hint">{{ t('screenings', 'Enter saves, Shift+Enter starts a new line') }}</span>
+				<button type="button" class="player__note-button" @click="closeNote">
+					{{ t('screenings', 'Cancel') }}
+				</button>
+				<button type="submit" class="player__note-button player__note-button--primary" :disabled="savingNote || !noteText.trim()">
+					{{ t('screenings', 'Save note') }}
+				</button>
+			</div>
+		</form>
+		<p v-if="noteSaved" class="player__note-saved" role="status">
+			{{ t('screenings', 'Note saved') }}
+		</p>
 
 		<div v-if="stopReason" class="player__stopped" role="alert">
 			<p>{{ stopMessage }}</p>
@@ -89,6 +120,12 @@
 					:aria-label="t('screenings', 'Position')"
 					:style="{ '--progress': progressPercent + '%' }"
 					@input="seekTo($event.target.valueAsNumber)">
+				<div v-if="notes?.enabled && duration" class="player__markers" aria-hidden="true">
+					<span v-for="note in notes.items"
+						:key="note.id"
+						class="player__marker"
+						:style="{ left: Math.min(100, (note.position / duration) * 100) + '%' }" />
+				</div>
 			</div>
 			<div class="player__bar">
 				<button class="player__button" :aria-label="playing ? t('screenings', 'Pause') : t('screenings', 'Play')" @click="togglePlay">
@@ -131,6 +168,13 @@
 						</option>
 					</select>
 				</label>
+				<button v-if="notes?.enabled"
+					class="player__button"
+					:aria-label="t('screenings', 'Add a note at this moment')"
+					:title="t('screenings', 'Add a note at this moment (N)')"
+					@click="openNote">
+					<svg viewBox="0 0 24 24"><path :d="mdiCommentPlusOutline" /></svg>
+				</button>
 				<button class="player__button" :aria-label="fullscreen ? t('screenings', 'Exit full screen') : t('screenings', 'Full screen')" @click="toggleFullscreen">
 					<svg viewBox="0 0 24 24"><path :d="fullscreen ? mdiFullscreenExit : mdiFullscreen" /></svg>
 				</button>
@@ -142,6 +186,7 @@
 <script setup>
 import {
 	mdiCogOutline,
+	mdiCommentPlusOutline,
 	mdiFastForward10,
 	mdiFullscreen,
 	mdiFullscreenExit,
@@ -154,13 +199,15 @@ import {
 } from '@mdi/js'
 import { t } from '@nextcloud/l10n'
 import Hls from 'hls.js'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { formatTime, Heartbeat, RangeRecorder, Tracker } from '../playback.js'
 
 const props = defineProps({
 	playback: { type: Object, required: true },
 	screening: { type: Object, required: true },
 	viewer: { type: Object, required: true },
+	/** The viewer's notes (see notes.js), or null. */
+	notes: { type: Object, default: null },
 })
 
 const container = ref(null)
@@ -251,6 +298,72 @@ function moveWatermark() {
 	const style = node && getComputedStyle(node)
 	if (!node || style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) < 0.05) {
 		stop('watermark')
+	}
+}
+
+// --- Notes ------------------------------------------------------------------
+
+const noting = ref(false)
+const noteAt = ref(0)
+const noteText = ref('')
+const noteError = ref(null)
+const savingNote = ref(false)
+const noteSaved = ref(false)
+const noteInput = ref(null)
+let resumeAfterNote = false
+let noteSavedTimer = null
+
+/** Pauses and opens the note box, stamped with the current moment. */
+function openNote() {
+	if (!props.notes?.enabled || stopReason.value || asking.value || noting.value) {
+		return
+	}
+	const v = video.value
+	resumeAfterNote = Boolean(v && !v.paused && !v.ended)
+	v?.pause()
+	noteAt.value = position()
+	noteText.value = ''
+	noteError.value = null
+	noting.value = true
+	nextTick(() => noteInput.value?.focus())
+}
+
+function closeNote() {
+	noting.value = false
+	container.value?.focus()
+	if (resumeAfterNote && !stopReason.value) {
+		video.value?.play().catch(() => {})
+	}
+	resumeAfterNote = false
+}
+
+async function saveNote() {
+	if (savingNote.value || !noteText.value.trim()) {
+		return
+	}
+	savingNote.value = true
+	noteError.value = null
+	try {
+		await props.notes.add(noteAt.value, noteText.value)
+		closeNote()
+		noteSaved.value = true
+		window.clearTimeout(noteSavedTimer)
+		noteSavedTimer = window.setTimeout(() => { noteSaved.value = false }, 2000)
+	} catch (error) {
+		noteError.value = error.message
+	} finally {
+		savingNote.value = false
+	}
+}
+
+// Key presses in the note box stay there (see @keydown.stop).
+function onNoteKey(event) {
+	if (event.key === 'Escape') {
+		event.preventDefault()
+		closeNote()
+	} else if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+		event.preventDefault()
+		saveNote()
 	}
 }
 
@@ -698,6 +811,7 @@ function onKey(event) {
 		l: () => seekBy(10),
 		f: toggleFullscreen,
 		m: toggleMute,
+		n: openNote,
 	}
 	const action = actions[event.key]
 	if (action && !(event.target instanceof HTMLInputElement && event.key.startsWith('Arrow'))) {
@@ -710,6 +824,9 @@ function onKey(event) {
 function reload() {
 	window.location.reload()
 }
+
+// The notes list under the player jumps through here.
+defineExpose({ seekTo })
 
 onMounted(() => {
 	tracker = new Tracker(props.playback.eventsUrl)
@@ -750,6 +867,7 @@ onBeforeUnmount(() => {
 	window.clearInterval(watermarkTimer)
 	window.clearTimeout(idleTimer)
 	window.clearTimeout(volumeTimer)
+	window.clearTimeout(noteSavedTimer)
 	document.removeEventListener('fullscreenchange', onFullscreenChange)
 	document.removeEventListener('pointermove', onDocumentPointer, { capture: true })
 	document.removeEventListener('mousemove', onDocumentPointer, { capture: true })

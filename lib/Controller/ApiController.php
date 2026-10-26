@@ -171,6 +171,9 @@ class ApiController extends Controller {
 			$screening = $this->screenings->get($id, $this->uid());
 			$body = $this->body();
 			$invite = $this->invites->create($id, $name, $email);
+			if (!empty($body['allowNotes']) || !empty($body['askQuestions'])) {
+				$invite = $this->invites->setFeedback($invite, !empty($body['allowNotes']), !empty($body['askQuestions']));
+			}
 			if (!empty($body['sendEmail'])) {
 				try {
 					$invite = $this->invites->sendInvitation($screening, $invite, (string)($body['message'] ?? ''));
@@ -217,6 +220,40 @@ class ApiController extends Controller {
 	/**
 	 * @throws NotFoundException
 	 */
+	/**
+	 * Notes and closing questions for one invite: {allowNotes?, askQuestions?}.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'PUT', url: '/api/invites/{id}/feedback', requirements: ['id' => '\d+'])]
+	public function inviteFeedback(int $id): JSONResponse {
+		return $this->handle(function () use ($id) {
+			[$notes, $questions] = $this->feedbackSwitches();
+			return $this->invites->setFeedback($this->ownedInvite($id), $notes, $questions);
+		});
+	}
+
+	/**
+	 * The same for every personal invite of the screening.
+	 */
+	#[NoAdminRequired]
+	#[FrontpageRoute(verb: 'PUT', url: '/api/screenings/{id}/invites/feedback', requirements: ['id' => '\d+'])]
+	public function allInvitesFeedback(int $id): JSONResponse {
+		return $this->handle(function () use ($id) {
+			$this->screenings->get($id, $this->uid());
+			[$notes, $questions] = $this->feedbackSwitches();
+			return $this->invites->setFeedbackForAll($id, $notes, $questions);
+		});
+	}
+
+	/**
+	 * @return array{?bool, ?bool}
+	 */
+	private function feedbackSwitches(): array {
+		$body = $this->body();
+		$read = fn (string $key) => array_key_exists($key, $body) && $body[$key] !== null ? (bool)$body[$key] : null;
+		return [$read('allowNotes'), $read('askQuestions')];
+	}
+
 	private function ownedInvite(int $id): Invite {
 		$invite = $this->invites->get($id);
 		$this->screenings->get($invite->getScreeningId(), $this->uid());

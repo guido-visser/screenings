@@ -388,6 +388,24 @@ body#body-public #content.app-public {
 	background: #fff;
 }
 
+/* Where the viewer left notes; purely visual, the seek bar stays clickable. */
+.player__markers {
+	position: absolute;
+	inset: 0 7px;
+	pointer-events: none;
+}
+
+.player__marker {
+	position: absolute;
+	top: 50%;
+	width: 3px;
+	height: 12px;
+	transform: translate(-50%, -50%);
+	background: var(--scr-text);
+	border-radius: 2px;
+	box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
 .player__volume {
 	--progress: 100%;
 	width: 80px;
@@ -609,4 +627,209 @@ body#body-public #content.app-public {
 	.viewer__card {
 		padding: 24px 20px;
 	}
+}
+
+/* --- Notes ----------------------------------------------------------------- */
+
+/* The note box sits inside the player, so it also works in fullscreen. */
+.player__note {
+	position: absolute;
+	z-index: 4;
+	left: 50%;
+	bottom: 72px;
+	width: min(560px, calc(100% - 24px));
+	transform: translateX(-50%);
+	box-sizing: border-box;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 14px;
+	color: var(--scr-text);
+	background: rgba(23, 23, 26, 0.96);
+	border: 1px solid var(--scr-border);
+	border-radius: 10px;
+	box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+	user-select: text;
+	-webkit-user-select: text;
+}
+
+.player__note-label {
+	color: var(--scr-accent);
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.player__note textarea,
+.notes__edit textarea {
+	width: 100%;
+	box-sizing: border-box;
+	min-height: 72px;
+	margin: 0;
+	padding: 8px 10px;
+	font: inherit;
+	font-size: 16px;
+	color: var(--scr-text);
+	background: var(--scr-bg);
+	border: 1px solid var(--scr-border);
+	border-radius: 8px;
+	resize: vertical;
+}
+
+.player__note textarea:focus-visible,
+.notes__edit textarea:focus-visible {
+	outline: 2px solid var(--scr-accent);
+	outline-offset: 0;
+}
+
+.player__note-error,
+.notes__error {
+	margin: 0;
+	color: var(--scr-error);
+	font-size: 0.9em;
+}
+
+.player__note-actions,
+.notes__actions {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.player__note-hint {
+	margin-right: auto;
+	color: var(--scr-muted);
+	font-size: 0.8em;
+}
+
+/* Nextcloud's button rule outranks a single class (see .player__resume). */
+.player .player__note-button,
+.notes .notes__button,
+.notes .notes__time {
+	width: auto;
+	min-height: 0;
+	margin: 0;
+	padding: 6px 14px;
+	font: inherit;
+	font-size: 0.9em;
+	font-weight: 600;
+	color: var(--scr-text);
+	background: transparent;
+	border: 1px solid var(--scr-border);
+	border-radius: 8px;
+	cursor: pointer;
+}
+
+.player .player__note-button:hover,
+.notes .notes__button:hover,
+.notes .notes__time:hover {
+	border-color: var(--scr-muted);
+}
+
+.player .player__note-button--primary,
+.notes .notes__button--primary {
+	color: var(--scr-accent-text);
+	background: var(--scr-accent);
+	border-color: var(--scr-accent);
+}
+
+.player .player__note-button:disabled,
+.notes .notes__button:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.player__note-saved {
+	position: absolute;
+	z-index: 4;
+	top: 16px;
+	left: 50%;
+	transform: translateX(-50%);
+	margin: 0;
+	padding: 6px 14px;
+	color: var(--scr-accent-text);
+	background: var(--scr-accent);
+	border-radius: var(--border-radius-pill, 999px);
+	font-weight: 600;
+	pointer-events: none;
+}
+
+@container player (max-width: 520px) {
+	.player__note {
+		bottom: 56px;
+		padding: 10px;
+	}
+
+	.player__note-hint {
+		display: none;
+	}
+}
+
+.notes {
+	margin-top: 8px;
+	padding: 20px;
+	background: var(--scr-surface);
+	border: 1px solid var(--scr-border);
+	border-radius: 12px;
+}
+
+.notes__title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 4px;
+	font-size: 1.15em;
+}
+
+.notes__count {
+	padding: 0 8px;
+	color: var(--scr-accent-text);
+	background: var(--scr-accent);
+	border-radius: 999px;
+	font-size: 0.8em;
+}
+
+.notes__intro {
+	margin: 0;
+	color: var(--scr-muted);
+	font-size: 0.9em;
+}
+
+.notes__list {
+	margin: 16px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.notes__item {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	gap: 4px 12px;
+	padding: 12px 0;
+	border-top: 1px solid var(--scr-border);
+}
+
+.notes .notes__time {
+	align-self: start;
+	padding: 2px 10px;
+	color: var(--scr-accent);
+	font-variant-numeric: tabular-nums;
+}
+
+.notes__body {
+	margin: 0;
+	white-space: pre-line;
+	overflow-wrap: anywhere;
+}
+
+.notes__item > .notes__actions {
+	grid-column: 2;
+	justify-content: flex-start;
+}
+
+.notes__edit {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
 }

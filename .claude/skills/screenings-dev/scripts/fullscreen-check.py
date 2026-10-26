@@ -10,7 +10,9 @@ screenshots: just entered, after 4 s idle, after moving the mouse.
   "/c/Program Files/Google/Chrome/Application/chrome.exe" --headless=new --remote-debugging-port=9333 --user-data-dir="$S/chrome-profile" --window-size=1707,960 --no-first-run --autoplay-policy=no-user-gesture-required about:blank &
   python -I fullscreen-check.py 9333 http://localhost:8080/apps/screenings/s/<token> "$S/shots"
 
-Use a throwaway --user-data-dir, never the user's profile. Stop it afterwards
+Use a throwaway --user-data-dir, never the user's profile, and a new one per
+code change: locally the app's scripts have no version suffix, so a reused
+profile runs the old player from its cache. Stop it afterwards
 (PowerShell: Stop-Process on chrome.exe whose CommandLine contains the port).
 Headless fullscreen uses an 800x600 screen; --screen-info breaks fullscreen.
 """
@@ -113,6 +115,9 @@ STATE = """JSON.stringify((() => {
 print('page:', js(ws, STATE))
 js(ws, "(async () => { const v = document.querySelector('video'); v.muted = true; await v.play().catch(() => {}); })()")
 time.sleep(2)
+# The control bar can sit below the fold on pages with a long header.
+js(ws, "document.querySelector('.player').scrollIntoView({block: 'center'})")
+time.sleep(0.5)
 b = json.loads(js(ws, "JSON.stringify(document.querySelector('[aria-label=\"Full screen\"]').getBoundingClientRect())"))
 x, y = b['x'] + b['width'] / 2, b['y'] + b['height'] / 2
 mouse(ws, 'mouseMoved', x, y)

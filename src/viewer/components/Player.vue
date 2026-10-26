@@ -186,6 +186,8 @@ let mp4Recoveries = 0
 /** Seeks closer than this stay inside the server's playhead window anyway. */
 const MP4_NEAR_SECONDS = 60
 const MP4_MAX_RECOVERIES = 3
+/** While playing, the controls hide after this long without pointer movement. */
+const IDLE_MS = 3000
 
 const position = () => video.value?.currentTime ?? 0
 
@@ -605,7 +607,17 @@ function wake() {
 			return
 		}
 		idle.value = true
-	}, 2500)
+	}, IDLE_MS)
+}
+
+/**
+ * In fullscreen, any pointer movement shows the controls, wherever the
+ * event lands (the player's own listeners only see events inside it).
+ */
+function onDocumentPointer() {
+	if (fullscreen.value) {
+		wake()
+	}
 }
 
 function onKey(event) {
@@ -659,6 +671,8 @@ onMounted(() => {
 		watermarkTimer = window.setInterval(moveWatermark, 15000)
 	}
 	document.addEventListener('fullscreenchange', onFullscreenChange)
+	document.addEventListener('pointermove', onDocumentPointer, { capture: true, passive: true })
+	document.addEventListener('mousemove', onDocumentPointer, { capture: true, passive: true })
 	document.addEventListener('webkitfullscreenchange', onFullscreenChange)
 	video.value.addEventListener('webkitbeginfullscreen', onNativeFullscreen)
 	video.value.addEventListener('webkitendfullscreen', onNativeFullscreen)
@@ -673,6 +687,8 @@ onBeforeUnmount(() => {
 	window.clearTimeout(idleTimer)
 	window.clearTimeout(volumeTimer)
 	document.removeEventListener('fullscreenchange', onFullscreenChange)
+	document.removeEventListener('pointermove', onDocumentPointer, { capture: true })
+	document.removeEventListener('mousemove', onDocumentPointer, { capture: true })
 	document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
 	document.removeEventListener('visibilitychange', onVisibilityChange)
 	window.removeEventListener('blur', onBlur)

@@ -239,8 +239,15 @@ body#body-public #content.app-public {
 	transition: opacity 0.3s;
 }
 
+/*
+ * Not 0: with nothing else visible over a fullscreen video, Chrome on
+ * Windows may hand the video to the GPU as a hardware overlay, and with
+ * some drivers page content then no longer appears on top of it, so the
+ * controls stayed invisible after waking. A 1% layer keeps the page
+ * composited over the video and looks the same as hidden.
+ */
 .player--idle .player__controls {
-	opacity: 0;
+	opacity: 0.01;
 }
 
 .player__seek {

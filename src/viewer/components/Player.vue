@@ -200,6 +200,7 @@ const ranges = new RangeRecorder()
 // Playhead before a seek started, for the "seeked" event.
 let seekFrom = null
 let bufferingSince = null
+let hiddenWhilePlaying = false
 let ready = false
 // Direct MP4: a seek target already reported to the server, before the
 // browser moves there (see seekTo), and recoveries from refused ranges.
@@ -624,23 +625,25 @@ function onNativeFullscreen(event) {
 
 // --- Page-level tracking -------------------------------------------------------
 
+/**
+ * Tab switches only matter while the film plays: then the viewer surely
+ * isn't watching. The return is tracked only to close such a switch.
+ */
 function onVisibilityChange() {
-	tracker.track(document.visibilityState === 'hidden' ? 'visibility_hidden' : 'visibility_visible', position())
 	if (document.visibilityState === 'hidden') {
+		if (playing.value) {
+			hiddenWhilePlaying = true
+			tracker.track('visibility_hidden', position())
+		}
 		// Mobile browsers may never fire pagehide (a tab closed from the
 		// switcher, a killed app); send what we have now, the playhead too,
 		// so "continue where you left off" knows where it was.
 		tracker.flush(true)
 		heartbeat.final()
+	} else if (hiddenWhilePlaying) {
+		hiddenWhilePlaying = false
+		tracker.track('visibility_visible', position())
 	}
-}
-
-function onBlur() {
-	tracker.track('window_blur', position())
-}
-
-function onFocus() {
-	tracker.track('window_focus', position())
 }
 
 function onPageHide() {
@@ -713,8 +716,6 @@ onMounted(() => {
 	heartbeat = new Heartbeat(props.playback, playerState, stop, (state) => ranges.restore(state.ranges))
 	heartbeat.start()
 	document.addEventListener('visibilitychange', onVisibilityChange)
-	window.addEventListener('blur', onBlur)
-	window.addEventListener('focus', onFocus)
 	window.addEventListener('pagehide', onPageHide)
 	window.addEventListener('pageshow', onPageShow)
 
@@ -754,8 +755,6 @@ onBeforeUnmount(() => {
 	document.removeEventListener('mousemove', onDocumentPointer, { capture: true })
 	document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
 	document.removeEventListener('visibilitychange', onVisibilityChange)
-	window.removeEventListener('blur', onBlur)
-	window.removeEventListener('focus', onFocus)
 	window.removeEventListener('pagehide', onPageHide)
 	window.removeEventListener('pageshow', onPageShow)
 })

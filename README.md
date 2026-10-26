@@ -93,6 +93,8 @@ Each screening has a **Dashboard** tab that shows:
 
 **Tracking notice:** by default viewers see "Your viewing behaviour is tracked." on the screening page and in the invitation email. Per screening you can change the text or turn the notice off (Settings → Playback and data). Whether you may track without telling viewers depends on your local privacy law.
 
+**What is tracked:** everything the viewer does with the film (play, pause, seeks, end, subtitles, quality, volume, full screen, buffering, errors) plus opening and leaving the page. Switching to another tab or app is only recorded while the film is playing, since that is when it means they aren't watching; window focus isn't tracked.
+
 **Continue where you left off:** when a viewer comes back (a closed tab, another device), the player asks "Welcome back" with *Start over* or *Continue where I left off*. The position comes from the invite's last session, which the player reports every 5 s and once more when the page is hidden or closed. Nothing is asked when they stopped in the first 10 seconds or in the last minute of the film.
 
 Click a viewer to see their sessions (device, screen, location, IP), a heatmap of how often they watched each part, and a filterable timeline of everything they did. Live data refreshes every 5 seconds.

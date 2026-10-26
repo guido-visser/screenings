@@ -1,6 +1,6 @@
 # Handoff: Screenings (Nextcloud app)
 
-**State on 2026-10-26:** version **0.3.11** in `main`, deployed to Guido's Nextcloud (NC 35.0.2) on 2026-10-26. `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
+**State on 2026-10-26:** version **0.3.12** in `main`; 0.3.11 is deployed to Guido's Nextcloud (NC 35.0.2). `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
 
 **Start here:** read the project skill `.claude/skills/screenings-dev/SKILL.md` before building, testing or deploying. It has the commands, the deploy script, the production quirks and the Windows/Docker pitfalls that cost a lot of time when rediscovered. User-facing behaviour is documented in the [README](../README.md); the original 8-phase plan is in [PLAN.md](PLAN.md) (done, partly superseded).
 
@@ -104,7 +104,8 @@ Still open from that review (low risk on a server with few trusted accounts):
 | 514311e | 0.3.8: invitation email designer; the picker's Choose button |
 | 8b34672 | Dev skill lessons and test scripts |
 | d5998b4 | 0.3.10: ffmpeg opens only plain media containers; playback budget per invite |
-| (this commit) | 0.3.11: "Welcome back" resume dialog in the viewer; playhead also saved when the page is hidden |
+| 7242901 | 0.3.11: "Welcome back" resume dialog in the viewer; playhead also saved when the page is hidden |
+| (this commit) | 0.3.12: less tracking: no window focus events; tab switches only while the film plays |
 
 ## Production (details outside the repo)
 

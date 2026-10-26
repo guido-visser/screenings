@@ -38,10 +38,11 @@ class TrackingService {
 		'buffering_start' => [],
 		'buffering_end' => ['seconds'],
 		'error' => ['reason'],
+		// Tab switches only while the film plays (the player decides); window
+		// focus isn't tracked: a paused viewer isn't watching anyway.
+		// Older events of the types window_blur/window_focus stay readable.
 		'visibility_hidden' => [],
 		'visibility_visible' => [],
-		'window_blur' => [],
-		'window_focus' => [],
 		'page_leave' => [],
 		'playback_stopped' => ['reason'],
 	];

@@ -58,7 +58,7 @@ class SubtitleService {
 	/**
 	 * @throws ValidationException
 	 */
-	public function add(int $screeningId, string $fileName, string $content, string $lang, string $label): Subtitle {
+	public function add(int $screeningId, string $fileName, string $content, string $lang, string $label, ?int $sourceFileId = null): Subtitle {
 		if (strlen($content) > self::MAX_BYTES) {
 			throw new ValidationException('Subtitle files can be at most 2 MB', 'file');
 		}
@@ -74,8 +74,44 @@ class SubtitleService {
 		$subtitle->setLabel($label);
 		$subtitle->setIsDefault(false);
 		$subtitle->setFileName($storedName);
+		$subtitle->setSourceFileId($sourceFileId);
 		$subtitle->setCreatedAt($this->time->getTime());
 		return $this->mapper->insert($subtitle);
+	}
+
+	/**
+	 * Replaces a subtitle with a new version of its file (and the language
+	 * its name now says). Viewers get it on their next page load.
+	 *
+	 * @return bool whether anything changed
+	 * @throws ValidationException
+	 */
+	public function replace(Subtitle $subtitle, string $fileName, string $content, string $lang, string $label, int $sourceFileId): bool {
+		if (strlen($content) > self::MAX_BYTES) {
+			throw new ValidationException('Subtitle files can be at most 2 MB', 'file');
+		}
+		[$lang, $label] = $this->validateMeta($lang, $label, $fileName);
+		$vtt = $this->converter->toVtt($content, $fileName);
+
+		$changed = false;
+		try {
+			$stored = $this->folder()->getFile($subtitle->getFileName());
+			if ($stored->getContent() !== $vtt) {
+				$stored->putContent($vtt);
+				$changed = true;
+			}
+		} catch (FileNotFoundException) {
+			$this->folder()->newFile($subtitle->getFileName(), $vtt);
+			$changed = true;
+		}
+		if ($subtitle->getLang() !== $lang || $subtitle->getLabel() !== $label || $subtitle->getSourceFileId() !== $sourceFileId) {
+			$subtitle->setLang($lang);
+			$subtitle->setLabel($label);
+			$subtitle->setSourceFileId($sourceFileId);
+			$this->mapper->update($subtitle);
+			$changed = true;
+		}
+		return $changed;
 	}
 
 	/**

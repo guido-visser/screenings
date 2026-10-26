@@ -18,6 +18,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setIsDefault(bool $isDefault)
  * @method string getFileName()
  * @method void setFileName(string $fileName)
+ * @method ?int getSourceFileId()
+ * @method void setSourceFileId(?int $sourceFileId)
  * @method int getCreatedAt()
  * @method void setCreatedAt(int $createdAt)
  */
@@ -27,11 +29,13 @@ class Subtitle extends Entity implements JsonSerializable {
 	protected $label;
 	protected $isDefault;
 	protected $fileName;
+	protected $sourceFileId;
 	protected $createdAt;
 
 	public function __construct() {
 		$this->addType('screeningId', 'integer');
 		$this->addType('isDefault', 'boolean');
+		$this->addType('sourceFileId', 'integer');
 		$this->addType('createdAt', 'integer');
 	}
 
@@ -42,6 +46,8 @@ class Subtitle extends Entity implements JsonSerializable {
 			'lang' => $this->lang,
 			'label' => $this->label,
 			'isDefault' => (bool)$this->isDefault,
+			// Imported from a file next to the video (kept up to date), or uploaded.
+			'fromFile' => $this->sourceFileId !== null,
 			'createdAt' => $this->createdAt,
 		];
 	}

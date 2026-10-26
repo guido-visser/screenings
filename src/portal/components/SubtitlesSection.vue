@@ -30,7 +30,7 @@
 				{{ t('screenings', 'Add subtitles from the video\'s folder') }}
 			</NcButton>
 			<p class="subtitles__hint">
-				{{ t('screenings', 'Picks up .srt and .vtt files named like the video, such as "film.en.srt" or "film.nl.srt" next to "film.mp4". This also happens automatically when you choose a video.') }}
+				{{ t('screenings', 'Picks up .srt and .vtt files named like the video, such as "film.en.srt" or "film.nl.srt" next to "film.mp4". This happens automatically when you choose a video, and when such a file is added or changed later. Deleting a file doesn\'t remove its subtitle here.') }}
 			</p>
 		</div>
 
@@ -85,7 +85,11 @@ async function importSiblings() {
 		items.value = result.subtitles
 		if (result.added.length) {
 			showSuccess(n('screenings', 'Added {count} subtitle', 'Added {count} subtitles', result.added.length, { count: result.added.length }))
-		} else if (!result.skipped.length) {
+		}
+		if (result.updated.length) {
+			showSuccess(n('screenings', 'Updated {count} subtitle from its file', 'Updated {count} subtitles from their files', result.updated.length, { count: result.updated.length }))
+		}
+		if (!result.added.length && !result.updated.length && !result.skipped.length) {
 			showInfo(t('screenings', 'No new subtitle files found next to the video.'))
 		}
 		for (const skipped of result.skipped) {

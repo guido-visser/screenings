@@ -69,7 +69,7 @@ Add `--force` to process media that is already ready or failed.
 
 ## Subtitles
 
-Subtitle files next to the video are added automatically when a screening is created or its video is changed, the way media players pick them up: `.srt` or `.vtt` files named like the video, plus a language and optional flags.
+Subtitle files next to the video are added automatically, the way media players pick them up: `.srt` or `.vtt` files named like the video, plus a language and optional flags. This happens when a screening is created or its video is changed, and whenever such a file is uploaded, changed, copied or renamed later (through the website, the desktop client or WebDAV; files copied straight onto the server's disk count once Nextcloud has scanned them). A changed file replaces its subtitle; viewers get it on their next page load. Deleting a file doesn't remove its subtitle, and subtitles uploaded by hand are never overwritten by a file.
 
 | File next to `film.mp4` | Shows as |
 |---|---|

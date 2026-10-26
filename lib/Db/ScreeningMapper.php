@@ -116,4 +116,19 @@ class ScreeningMapper extends QBMapper {
 		$result->closeCursor();
 		return $map;
 	}
+
+	/**
+	 * @param int[] $fileIds
+	 * @return Screening[] screenings whose video is one of these files
+	 */
+	public function findBySourceFileIds(array $fileIds): array {
+		if ($fileIds === []) {
+			return [];
+		}
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->in('source_file_id', $qb->createNamedParameter($fileIds, IQueryBuilder::PARAM_INT_ARRAY)));
+		return $this->findEntities($qb);
+	}
 }

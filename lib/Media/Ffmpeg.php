@@ -15,6 +15,11 @@ use OCP\IBinaryFinder;
 class Ffmpeg {
 	public const CONFIG_FFMPEG_PATH = 'ffmpeg_path';
 	public const CONFIG_FFPROBE_PATH = 'ffprobe_path';
+	/** Tried when PATH lookups find nothing, e.g. because of open_basedir. */
+	private const COMMON_DIRS = ['/usr/bin', '/usr/local/bin', '/opt/homebrew/bin', '/snap/bin'];
+
+	/** @var array<string, ?string> binary => path, per request */
+	private array $resolved = [];
 
 	public function __construct(
 		private IAppConfig $appConfig,
@@ -88,12 +93,42 @@ class Ffmpeg {
 	}
 
 	private function path(string $configKey, string $binary): ?string {
+		if (array_key_exists($binary, $this->resolved)) {
+			return $this->resolved[$binary];
+		}
 		$configured = trim($this->appConfig->getValueString(Application::APP_ID, $configKey, ''));
 		if ($configured !== '') {
-			return is_executable($configured) ? $configured : null;
+			return $this->resolved[$binary] = $this->usable($configured) ? $configured : null;
 		}
 		$found = $this->binaryFinder->findBinaryPath($binary);
-		return is_string($found) && $found !== '' ? $found : null;
+		if (is_string($found) && $found !== '') {
+			return $this->resolved[$binary] = $found;
+		}
+		foreach (self::COMMON_DIRS as $dir) {
+			if ($this->usable($dir . '/' . $binary)) {
+				return $this->resolved[$binary] = $dir . '/' . $binary;
+			}
+		}
+		return $this->resolved[$binary] = null;
+	}
+
+	/**
+	 * With open_basedir (e.g. Plesk limits PHP to the site's folder), PHP
+	 * can't even check files in /usr/bin, but it can still run them. So
+	 * when the check fails, try running the program.
+	 */
+	private function usable(string $path): bool {
+		if (@is_executable($path)) {
+			return true;
+		}
+		if (ini_get('open_basedir') === '' || ini_get('open_basedir') === false) {
+			return false;
+		}
+		try {
+			return ProcessRunner::run([$path, '-hide_banner', '-version'], 10)['exitCode'] === 0;
+		} catch (\Throwable) {
+			return false;
+		}
 	}
 
 	/**

@@ -19,14 +19,17 @@ class ProcessRunner {
 	 * @throws MediaException
 	 */
 	public static function run(array $command, ?int $timeoutSeconds = null, ?callable $onStdoutLine = null): array {
+		// stdin is a pipe closed right away (end of input). Not /dev/null:
+		// open_basedir would forbid opening it.
 		$process = proc_open($command, [
-			0 => ['file', '/dev/null', 'r'],
+			0 => ['pipe', 'r'],
 			1 => ['pipe', 'w'],
 			2 => ['pipe', 'w'],
 		], $pipes);
 		if (!is_resource($process)) {
 			throw new MediaException('Could not start ' . basename($command[0]));
 		}
+		fclose($pipes[0]);
 		stream_set_blocking($pipes[1], false);
 		stream_set_blocking($pipes[2], false);
 

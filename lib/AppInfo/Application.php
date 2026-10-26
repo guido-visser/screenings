@@ -6,11 +6,16 @@ namespace OCA\Screenings\AppInfo;
 
 use OCA\Files\Event\LoadAdditionalScriptsEvent;
 use OCA\Screenings\Listener\LoadFilesScriptsListener;
+use OCA\Screenings\Listener\SubtitleFileListener;
 use OCA\Screenings\Listener\UserDeletedListener;
 use OCP\AppFramework\App;
 use OCP\AppFramework\Bootstrap\IBootContext;
 use OCP\AppFramework\Bootstrap\IBootstrap;
 use OCP\AppFramework\Bootstrap\IRegistrationContext;
+use OCP\Files\Events\Node\NodeCopiedEvent;
+use OCP\Files\Events\Node\NodeCreatedEvent;
+use OCP\Files\Events\Node\NodeRenamedEvent;
+use OCP\Files\Events\Node\NodeWrittenEvent;
 use OCP\User\Events\UserDeletedEvent;
 
 class Application extends App implements IBootstrap {
@@ -24,6 +29,9 @@ class Application extends App implements IBootstrap {
 		self::registerVendorAutoloader();
 		$context->registerEventListener(LoadAdditionalScriptsEvent::class, LoadFilesScriptsListener::class);
 		$context->registerEventListener(UserDeletedEvent::class, UserDeletedListener::class);
+		foreach ([NodeCreatedEvent::class, NodeWrittenEvent::class, NodeRenamedEvent::class, NodeCopiedEvent::class] as $event) {
+			$context->registerEventListener($event, SubtitleFileListener::class);
+		}
 	}
 
 	/**

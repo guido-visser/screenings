@@ -1,6 +1,6 @@
 # Handoff: Screenings (Nextcloud app)
 
-**State on 2026-10-26:** version **0.4.2** in `main` (the feedback feature: viewer notes, the owner's review page, closing questions, and live updates of both). **Not deployed**: production runs 0.3.12. `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
+**State on 2026-10-26:** version **0.4.2** in `main` (the feedback feature: viewer notes, the owner's review page, closing questions, and live updates of both), **deployed** to Guido's Nextcloud on 2026-10-26 (checked: all new routes 200, owner preview of Bloedtranen streams, Feedback tab loads). `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
 
 **Start here:** read the project skill `.claude/skills/screenings-dev/SKILL.md` before building, testing or deploying. It has the commands, the deploy script, the production quirks and the Windows/Docker pitfalls that cost a lot of time when rediscovered. User-facing behaviour is documented in the [README](../README.md); the original 8-phase plan is in [PLAN.md](PLAN.md) (done, partly superseded).
 
@@ -119,7 +119,7 @@ Still open from that review (low risk on a server with few trusted accounts):
 | 03d6f89 | 0.4.0: viewer notes (feedback phase 1): per-invite switch, note box in the player (N), markers, "My notes" list, notes in the owner's viewer timeline |
 | 5440f09 | Feedback phase 2: Notes tab with the owner's preview player, colour-coded markers, note card, following list, CSV/SRT export, dashboard tile, bundled notifications |
 | 5b8d3ac | 0.4.1: feedback phase 3: closing questions (editor, per-invite switch, dialog at the end and "Give feedback", reminder, Feedback → Answers with summaries and CSV, notification) |
-| (this commit) | 0.4.2: live Feedback pages: new/edited/deleted notes and answers appear within 5 s, live viewers on the review timeline |
+| d7ebe1a | 0.4.2 (deployed): live Feedback pages: new/edited/deleted notes and answers appear within 5 s, live viewers on the review timeline |
 
 ## Production (details outside the repo)
 

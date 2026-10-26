@@ -105,7 +105,8 @@ Still open from that review (low risk on a server with few trusted accounts):
 | 8b34672 | Dev skill lessons and test scripts |
 | d5998b4 | 0.3.10: ffmpeg opens only plain media containers; playback budget per invite |
 | 7242901 | 0.3.11: "Welcome back" resume dialog in the viewer; playhead also saved when the page is hidden |
-| (this commit) | 0.3.12: less tracking: no window focus events; tab switches only while the film plays |
+| 2a7c435 | 0.3.12: less tracking: no window focus events; tab switches only while the film plays |
+| (this commit) | Package build on Docker's own disk with a lockfile-keyed npm ci: deploy ~8 min → ~30 s, identical package |
 
 ## Production (details outside the repo)
 

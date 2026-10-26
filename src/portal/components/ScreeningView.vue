@@ -182,8 +182,13 @@ const props = defineProps({
 })
 const emit = defineEmits(['updated', 'deleted'])
 
-const availableModes = loadState('screenings', 'deliveryModes', ['mp4', 'hls'])
+const availableModes = loadState('screenings', 'deliveryModes', ['auto', 'mp4', 'hls'])
 const allModes = [
+	{
+		id: 'auto',
+		label: t('screenings', 'Auto (recommended)'),
+		description: t('screenings', 'Plays videos that browsers can play directly, and converts everything else on the server (ProRes, DNxHR, MKV, HEVC, 10-bit, PCM or Dolby audio, and more).'),
+	},
 	{
 		id: 'mp4',
 		label: t('screenings', 'Direct MP4'),
@@ -202,7 +207,24 @@ const allModes = [
 ]
 const modes = allModes.filter((mode) => availableModes.includes(mode.id))
 
-const MEDIA_FIELDS = ['mediaStatus', 'mediaProgress', 'mediaError', 'mediaWarning', 'durationMs']
+const MP4_MIMES = ['video/mp4', 'video/x-m4v', 'video/quicktime']
+// Nextcloud has no type for these; see ScreeningService::OTHER_VIDEO_EXTENSIONS.
+const VIDEO_EXTENSIONS = ['mxf']
+
+/** Which files the picker offers; Direct MP4 only plays MP4/MOV as they are. */
+function videoFilter(mode) {
+	return (node) => {
+		if (node.type === 'folder') {
+			return true
+		}
+		if (mode === 'mp4') {
+			return MP4_MIMES.includes(node.mime)
+		}
+		return node.mime?.startsWith('video/') || VIDEO_EXTENSIONS.includes(node.extension?.replace('.', '').toLowerCase())
+	}
+}
+
+const MEDIA_FIELDS = ['mediaStatus', 'mediaProgress', 'mediaError', 'mediaWarning', 'mediaMode', 'durationMs']
 const POLL_MS = 3000
 
 const screening = ref(null)
@@ -351,10 +373,14 @@ async function regenerateOpenLink() {
 async function pickSource() {
 	const hls = form.value.deliveryMode === 'hls'
 	// Nextcloud maps .m3u8 to audio/mpegurl. Folders stay visible for navigation.
-	const picker = getFilePickerBuilder(hls ? t('screenings', 'Choose the HLS playlist') : t('screenings', 'Choose the film'))
+	const builder = getFilePickerBuilder(hls ? t('screenings', 'Choose the HLS playlist') : t('screenings', 'Choose the film'))
 		.allowDirectories(false)
-		.setMimeTypeFilter(hls ? ['audio/mpegurl', 'application/vnd.apple.mpegurl'] : ['video/mp4', 'video/quicktime', 'video/x-matroska', 'video/webm'])
-		.build()
+	if (hls) {
+		builder.setMimeTypeFilter(['audio/mpegurl', 'application/vnd.apple.mpegurl'])
+	} else {
+		builder.setFilter(videoFilter(form.value.deliveryMode))
+	}
+	const picker = builder.build()
 	try {
 		form.value.sourcePath = await picker.pick()
 	} catch {

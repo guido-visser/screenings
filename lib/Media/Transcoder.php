@@ -7,15 +7,23 @@ namespace OCA\Screenings\Media;
 use OCP\IBinaryFinder;
 
 /**
- * "Server transcode" mode: ffmpeg turns the source into plain HLS, either
- * re-encoded in up to three qualities or, in "remux" mode, repackaged without
- * re-encoding (fast, single quality, H.264 sources only). HlsPackager then
+ * Converts a source into plain HLS with ffmpeg: re-encoded in up to three
+ * qualities ("full"), repackaged without re-encoding ("remux": fast, single
+ * quality, H.264 only), or with only the audio re-encoded ("audio": H.264
+ * video with sound browsers can't play). "Server transcode" uses the admin's
+ * choice of full or remux; "Auto" picks per file with plan(). HlsPackager then
  * encrypts it, because ffmpeg's own HLS encryption reuses one IV for every
  * segment.
  */
 class Transcoder {
 	public const MODE_FULL = 'full';
 	public const MODE_REMUX = 'remux';
+	public const MODE_AUDIO = 'audio';
+
+	/** Audio that MPEG-TS segments carry and every browser plays. */
+	private const COPY_AUDIO_CODECS = ['aac', 'mp3'];
+	/** 8-bit 4:2:0, the only H.264 browsers decode. */
+	private const BROWSER_PIX_FMTS = ['yuv420p', 'yuvj420p'];
 
 	/** Height => video bitrate (kbit/s). */
 	public const LADDER = [1080 => 5000, 720 => 2800, 480 => 1400];
@@ -41,9 +49,11 @@ class Transcoder {
 		// A trailing slash ("dir//v0.m3u8") makes ffmpeg write "/v0.m3u8" into the master playlist.
 		$outDir = rtrim($outDir, '/');
 
-		$args = $mode === self::MODE_REMUX
-			? $this->remuxArgs($info)
-			: $this->encodeArgs($info);
+		$args = match ($mode) {
+			self::MODE_REMUX => $this->remuxArgs($info),
+			self::MODE_AUDIO => $this->audioArgs($info),
+			default => $this->encodeArgs($info),
+		};
 
 		$command = array_merge(
 			$this->niceWrapper(),
@@ -76,6 +86,22 @@ class Transcoder {
 		if (!is_file($outDir . '/' . MediaStorage::MASTER_PLAYLIST)) {
 			throw new MediaException('ffmpeg finished without writing a playlist');
 		}
+	}
+
+	/**
+	 * The cheapest conversion that makes a file play in every browser, from
+	 * Ffmpeg::probe() output. Only Auto uses this.
+	 */
+	public static function plan(array $info): string {
+		$browserVideo = ($info['videoCodec'] ?? null) === 'h264'
+			&& in_array($info['pixFmt'] ?? null, self::BROWSER_PIX_FMTS, true);
+		if (!$browserVideo) {
+			return self::MODE_FULL;
+		}
+		if (empty($info['hasAudio']) || in_array($info['audioCodec'] ?? null, self::COPY_AUDIO_CODECS, true)) {
+			return self::MODE_REMUX;
+		}
+		return self::MODE_AUDIO;
 	}
 
 	/**
@@ -156,6 +182,22 @@ class Transcoder {
 		}
 		$codec = array_merge($codec, ['-c', 'copy']);
 		return ['codec' => $codec, 'streamMap' => $info['hasAudio'] ? 'v:0,a:0' : 'v:0'];
+	}
+
+	/**
+	 * Keeps the video as it is and re-encodes only the audio to AAC.
+	 *
+	 * @return array{codec: list<string>, streamMap: string}
+	 */
+	private function audioArgs(array $info): array {
+		return [
+			'codec' => [
+				'-map', '0:v:0', '-map', '0:a:0',
+				'-c:v', 'copy',
+				'-c:a', 'aac', '-b:a', self::AUDIO_KBPS . 'k', '-ac', '2',
+			],
+			'streamMap' => 'v:0,a:0',
+		];
 	}
 
 	/**

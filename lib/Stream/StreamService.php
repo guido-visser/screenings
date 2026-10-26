@@ -56,7 +56,7 @@ class StreamService {
 	 */
 	public function playerConfig(StreamContext $ctx, IRequest $request): array {
 		$sid = $ctx->session->getId();
-		$hls = $ctx->screening->getDeliveryMode() !== Screening::MODE_MP4;
+		$hls = $ctx->screening->servedAs() !== Screening::MODE_MP4;
 		$route = fn (string $name, array $params = []) => $this->urlGenerator->linkToRoute(Application::APP_ID . '.stream.' . $name, ['sessionId' => $sid] + $params);
 
 		$subtitles = [];
@@ -92,7 +92,7 @@ class StreamService {
 	 */
 	public function hlsFile(StreamContext $ctx, string $file): array {
 		$screening = $ctx->screening;
-		if ($screening->getDeliveryMode() === Screening::MODE_MP4 || $screening->getMediaToken() === null) {
+		if ($screening->servedAs() === Screening::MODE_MP4 || $screening->getMediaToken() === null) {
 			throw new StreamDenied(StreamDenied::NOT_FOUND, 404);
 		}
 
@@ -126,7 +126,7 @@ class StreamService {
 	 */
 	public function mp4Range(StreamContext $ctx, ?string $rangeHeader): RangeResponse {
 		$screening = $ctx->screening;
-		$file = $screening->getDeliveryMode() === Screening::MODE_MP4 ? $this->media->sourceFile($screening) : null;
+		$file = $screening->servedAs() === Screening::MODE_MP4 ? $this->media->sourceFile($screening) : null;
 		if ($file === null) {
 			throw new StreamDenied(StreamDenied::NOT_FOUND, 404);
 		}

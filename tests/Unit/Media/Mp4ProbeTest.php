@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\Screenings\Tests\Unit\Media;
 
 use OCA\Screenings\Media\MediaException;
+use OCA\Screenings\Media\Mp4Info;
 use OCA\Screenings\Media\Mp4Probe;
 use PHPUnit\Framework\TestCase;
 
@@ -18,9 +19,16 @@ class Mp4ProbeTest extends TestCase {
 		return self::box('mvhd', "\0\0\0\0" . pack('NNNN', 0, 0, $timescale, $duration) . str_repeat("\0", 80));
 	}
 
-	private static function trak(string $handler, string $codec): string {
+	private static function trak(string $handler, string $codec, ?int $avcProfile = null): string {
 		$hdlr = self::box('hdlr', "\0\0\0\0" . "\0\0\0\0" . $handler . str_repeat("\0", 12) . "\0");
-		$stsd = self::box('stsd', "\0\0\0\0" . pack('N', 1) . pack('N', 16) . $codec . str_repeat("\0", 8));
+		if ($avcProfile !== null) {
+			// VisualSampleEntry: 78 bytes of fields, then an avcC child box
+			// (configurationVersion 1, then the profile).
+			$entry = self::box($codec, str_repeat("\0", 78) . self::box('avcC', "\x01" . chr($avcProfile) . "\0\x28\xff"));
+		} else {
+			$entry = pack('N', 16) . $codec . str_repeat("\0", 8);
+		}
+		$stsd = self::box('stsd', "\0\0\0\0" . pack('N', 1) . $entry);
 		$stbl = self::box('stbl', $stsd);
 		$minf = self::box('minf', $stbl);
 		$mdia = self::box('mdia', $hdlr . $minf);
@@ -35,8 +43,13 @@ class Mp4ProbeTest extends TestCase {
 		return [$stream, strlen($data)];
 	}
 
-	private static function moov(string $videoCodec = 'avc1'): string {
-		return self::box('moov', self::mvhd(1000, 125500) . self::trak('vide', $videoCodec) . self::trak('soun', 'mp4a'));
+	private static function moov(string $videoCodec = 'avc1', ?int $avcProfile = null, string $audioCodec = 'mp4a'): string {
+		return self::box('moov', self::mvhd(1000, 125500) . self::trak('vide', $videoCodec, $avcProfile) . self::trak('soun', $audioCodec));
+	}
+
+	private static function probe(string $moov): Mp4Info {
+		[$stream, $size] = self::file(self::box('ftyp', 'isom'), $moov);
+		return (new Mp4Probe())->probe($stream, $size);
 	}
 
 	public function testReadsFaststartFile(): void {
@@ -57,7 +70,8 @@ class Mp4ProbeTest extends TestCase {
 		$info = (new Mp4Probe())->probe($stream, $size);
 
 		$this->assertFalse($info->faststart);
-		$this->assertStringContainsString('fast start', Mp4Probe::warnings($info)[0]);
+		// Plays fine since the stream allows index reads; nothing to warn about.
+		$this->assertSame([], Mp4Probe::warnings($info));
 		// The index sits right after ftyp (12 bytes) and mdat (108 bytes).
 		$this->assertSame(120, $info->moovOffset);
 		$this->assertSame($size - 120, $info->moovSize);
@@ -92,5 +106,27 @@ class Mp4ProbeTest extends TestCase {
 		$this->expectException(MediaException::class);
 		$this->expectExceptionMessage('no index');
 		(new Mp4Probe())->probe($stream, $size);
+	}
+
+	public function testReadsH264Profile(): void {
+		$this->assertSame(100, self::probe(self::moov('avc1', 100))->videoProfile);
+		$this->assertNull(self::probe(self::moov('avc1'))->videoProfile, 'no avcC box');
+	}
+
+	public function testBrowserSafe(): void {
+		$this->assertTrue(Mp4Probe::browserSafe(self::probe(self::moov('avc1', 100))), 'H.264 High + AAC');
+		$this->assertTrue(Mp4Probe::browserSafe(self::probe(self::moov('avc1'))), 'H.264, profile unknown');
+		$this->assertFalse(Mp4Probe::browserSafe(self::probe(self::moov('avc1', 110))), 'H.264 High 10');
+		$this->assertFalse(Mp4Probe::browserSafe(self::probe(self::moov('avc1', 122))), 'H.264 High 4:2:2');
+		$this->assertFalse(Mp4Probe::browserSafe(self::probe(self::moov('hvc1'))), 'HEVC');
+		$this->assertFalse(Mp4Probe::browserSafe(self::probe(self::moov('apcn'))), 'ProRes');
+		$this->assertFalse(Mp4Probe::browserSafe(self::probe(self::moov('avc1', 100, 'lpcm'))), 'PCM audio');
+		$this->assertFalse(Mp4Probe::browserSafe(self::probe(self::moov('avc1', 100, 'ac-3'))), 'Dolby audio');
+	}
+
+	public function testWarnsAboutTenBitH264(): void {
+		$warnings = Mp4Probe::warnings(self::probe(self::moov('avc1', 110)));
+		$this->assertCount(1, $warnings);
+		$this->assertStringContainsString('10-bit', $warnings[0]);
 	}
 }

@@ -9,8 +9,8 @@ use OCP\IAppConfig;
 use OCP\IBinaryFinder;
 
 /**
- * Locates and runs ffmpeg/ffprobe. Only needed for the optional
- * "Server transcode" delivery mode.
+ * Locates and runs ffmpeg/ffprobe. Only needed for converting files
+ * ("Server transcode", and "Auto" for files browsers can't play).
  */
 class Ffmpeg {
 	public const CONFIG_FFMPEG_PATH = 'ffmpeg_path';
@@ -46,7 +46,7 @@ class Ffmpeg {
 	}
 
 	/**
-	 * @return array{durationMs: ?int, height: ?int, videoCodec: ?string, hasAudio: bool}
+	 * @return array{durationMs: ?int, height: ?int, videoCodec: ?string, pixFmt: ?string, hasAudio: bool, audioCodec: ?string}
 	 * @throws MediaException
 	 */
 	public function probe(string $localPath): array {
@@ -58,13 +58,13 @@ class Ffmpeg {
 		}
 
 		$video = null;
-		$hasAudio = false;
+		$audio = null;
 		foreach ($info['streams'] ?? [] as $stream) {
 			if (($stream['codec_type'] ?? '') === 'video' && $video === null && empty($stream['disposition']['attached_pic'])) {
 				$video = $stream;
 			}
-			if (($stream['codec_type'] ?? '') === 'audio') {
-				$hasAudio = true;
+			if (($stream['codec_type'] ?? '') === 'audio' && $audio === null) {
+				$audio = $stream;
 			}
 		}
 		if ($video === null) {
@@ -76,7 +76,9 @@ class Ffmpeg {
 			'durationMs' => is_numeric($duration) ? (int)round((float)$duration * 1000) : null,
 			'height' => isset($video['height']) ? (int)$video['height'] : null,
 			'videoCodec' => $video['codec_name'] ?? null,
-			'hasAudio' => $hasAudio,
+			'pixFmt' => $video['pix_fmt'] ?? null,
+			'hasAudio' => $audio !== null,
+			'audioCodec' => $audio['codec_name'] ?? null,
 		];
 	}
 

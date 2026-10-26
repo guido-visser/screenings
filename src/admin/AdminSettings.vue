@@ -1,7 +1,7 @@
 <template>
 	<div>
 	<NcSettingsSection :name="t('screenings', 'Screenings: video processing')"
-		:description="t('screenings', 'Direct MP4 and Pre-packaged HLS work on every server. Server transcode converts videos to encrypted HLS on this server with ffmpeg, which needs CPU time and temporary disk space about the size of the film.')">
+		:description="t('screenings', 'Direct MP4, Pre-packaged HLS, and Auto for videos browsers play as they are, work on every server. Converting other videos (Auto, Server transcode) uses ffmpeg on this server, which needs CPU time and temporary disk space about the size of the film.')">
 		<NcNoteCard v-if="ffmpegFound" type="success">
 			<p>{{ t('screenings', 'ffmpeg found: {path}', { path: settings.detected.ffmpeg.path }) }}</p>
 			<p class="admin__version">
@@ -12,14 +12,14 @@
 			</p>
 		</NcNoteCard>
 		<NcNoteCard v-else type="info">
-			{{ t('screenings', 'ffmpeg was not found on this server, so Server transcode is unavailable. Install ffmpeg or set its path below.') }}
+			{{ t('screenings', 'ffmpeg was not found on this server, so videos can\'t be converted. Install ffmpeg or set its path below.') }}
 		</NcNoteCard>
 
 		<NcCheckboxRadioSwitch :model-value="settings.transcodeEnabled"
 			type="switch"
 			:disabled="saving || (!settings.transcodeEnabled && !transcodeAvailable)"
 			@update:model-value="(value) => save({ transcodeEnabled: value })">
-			{{ t('screenings', 'Allow Server transcode') }}
+			{{ t('screenings', 'Allow converting videos on this server') }}
 		</NcCheckboxRadioSwitch>
 
 		<fieldset class="admin__modes" :disabled="!settings.transcodeEnabled || saving">
@@ -36,7 +36,7 @@
 				type="radio"
 				name="transcodeMode"
 				value="remux"
-				:description="t('screenings', 'Only repackages H.264 videos into encrypted HLS, without re-encoding. One quality, takes seconds to minutes, almost no CPU.')"
+				:description="t('screenings', 'Only repackages H.264 videos into encrypted HLS, without re-encoding (Auto may still convert just the audio). One quality, takes seconds to minutes, almost no CPU. Videos that need a full conversion are refused.')"
 				@update:model-value="(value) => save({ transcodeMode: value })">
 				{{ t('screenings', 'Remux only (low-power servers)') }}
 			</NcCheckboxRadioSwitch>

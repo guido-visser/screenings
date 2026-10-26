@@ -29,6 +29,7 @@ class MediaProcessor {
 		private MediaService $media,
 		private HlsPackager $packager,
 		private Transcoder $transcoder,
+		private Ffmpeg $ffmpeg,
 		private DeliveryModes $modes,
 		private IRootFolder $rootFolder,
 		private ITempManager $tempManager,
@@ -49,7 +50,7 @@ class MediaProcessor {
 		if ($screening->getMediaToken() !== $token) {
 			return 'stale';
 		}
-		if ($screening->getDeliveryMode() === Screening::MODE_MP4) {
+		if ($screening->servedAs() === Screening::MODE_MP4) {
 			return 'skipped';
 		}
 
@@ -116,7 +117,7 @@ class MediaProcessor {
 		$folder = $this->storage->createFolder($screening->getId(), $token);
 		$folder->newFile(MediaStorage::KEY_FILE, $key);
 
-		if ($screening->getDeliveryMode() === Screening::MODE_HLS) {
+		if ($screening->servedAs() === Screening::MODE_HLS) {
 			$userFolder = $this->rootFolder->getUserFolder($screening->getOwnerUid());
 			$masterPath = $userFolder->getRelativePath($file->getPath()) ?? throw new MediaException('The playlist is outside your files');
 			return $this->packager->package($masterPath, HlsPackager::userFolderReader($userFolder), $folder, $key, $progress);
@@ -131,8 +132,11 @@ class MediaProcessor {
 			if ($source === false) {
 				throw new MediaException('Could not read the source video');
 			}
+			$mode = $screening->getDeliveryMode() === Screening::MODE_AUTO
+				? $this->autoPlan($screening, $token, $source)
+				: $this->modes->transcodeMode();
 			// Encoding is the slow part (0-90%); encrypting the output is quick.
-			$this->transcoder->transcode($source, $workDir, $this->modes->transcodeMode(), fn (float $f) => $progress($f * 0.9));
+			$this->transcoder->transcode($source, $workDir, $mode, fn (float $f) => $progress($f * 0.9));
 			return $this->packager->package(
 				'/' . MediaStorage::MASTER_PLAYLIST,
 				HlsPackager::localReader($workDir),
@@ -143,6 +147,22 @@ class MediaProcessor {
 		} finally {
 			self::removeDirectory($workDir);
 		}
+	}
+
+	/**
+	 * Picks Auto's conversion for this file and records it, so the portal can
+	 * show what is happening.
+	 *
+	 * @throws MediaException
+	 */
+	private function autoPlan(Screening $screening, string $token, string $source): string {
+		$plan = Transcoder::plan($this->ffmpeg->probe($source));
+		// The admin's "repackage only" setting (for weak servers) also limits Auto.
+		if ($plan === Transcoder::MODE_FULL && $this->modes->transcodeMode() === Transcoder::MODE_REMUX) {
+			throw new MediaException('This video needs a full conversion, but the server is set to repackage only (Administration settings → Screenings). Export it as H.264, or ask the admin to allow full conversion.');
+		}
+		$this->mapper->updateMediaIfCurrent($screening->getId(), $token, ['media_mode' => $plan]);
+		return $plan;
 	}
 
 	private static function removeDirectory(string $dir): void {

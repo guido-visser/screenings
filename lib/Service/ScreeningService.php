@@ -23,6 +23,12 @@ class ScreeningService {
 	public const MAX_RETENTION_DAYS = 3650;
 	/** ISO base media files Direct MP4 can stream (.mp4, .m4v, .mov). */
 	public const MP4_MIMES = ['video/mp4', 'video/x-m4v', 'video/quicktime'];
+	/**
+	 * Video files Nextcloud doesn't label video/*: it has no type for MXF
+	 * (cameras, Avid, Premiere/Resolve exports), so it calls them
+	 * application/octet-stream. Keep in sync with VIDEO_EXTENSIONS in the frontend.
+	 */
+	public const OTHER_VIDEO_EXTENSIONS = ['mxf'];
 
 	public function __construct(
 		private ScreeningMapper $mapper,
@@ -80,7 +86,7 @@ class ScreeningService {
 		$screening = new Screening();
 		$screening->setOwnerUid($uid);
 		$screening->setTitle('');
-		$screening->setDeliveryMode(Screening::MODE_MP4);
+		$screening->setDeliveryMode(Screening::MODE_AUTO);
 		$screening->setMediaStatus(Screening::MEDIA_NONE);
 		$screening->setMediaProgress(0);
 		$screening->setWatermark(false);
@@ -293,11 +299,15 @@ class ScreeningService {
 				break;
 			case Screening::MODE_MP4:
 				if (!in_array($mime, self::MP4_MIMES, true)) {
-					throw new ValidationException('Direct MP4 needs an .mp4 file. Other formats need Server transcode.', 'sourcePath');
+					throw new ValidationException('Direct MP4 needs an .mp4 or .mov file. For other formats, choose Auto.', 'sourcePath');
 				}
 				break;
 			default:
-				if (!str_starts_with($mime, 'video/')) {
+				if ($isPlaylist) {
+					throw new ValidationException('For an .m3u8 playlist, choose Pre-packaged HLS', 'sourcePath');
+				}
+				$extension = strtolower(pathinfo($file->getName(), PATHINFO_EXTENSION));
+				if (!str_starts_with($mime, 'video/') && !in_array($extension, self::OTHER_VIDEO_EXTENSIONS, true)) {
 					throw new ValidationException('Select a video file', 'sourcePath');
 				}
 		}

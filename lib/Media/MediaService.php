@@ -6,6 +6,8 @@ namespace OCA\Screenings\Media;
 
 use OCA\Screenings\BackgroundJob\ProcessMediaJob;
 use OCA\Screenings\Db\Screening;
+use OCA\Screenings\Service\DeliveryModes;
+use OCA\Screenings\Service\ScreeningService;
 use OCP\BackgroundJob\IJobList;
 use OCP\Files\File;
 use OCP\Files\IRootFolder;
@@ -14,12 +16,14 @@ use OCP\Security\ISecureRandom;
 /**
  * Starts media preparation whenever a screening's source or delivery mode
  * changes. Direct MP4 is checked immediately (it only reads the file's
- * header); HLS packaging and transcoding run in a background job.
+ * index), and so is Auto for MP4s that browsers play as they are. HLS
+ * packaging and transcoding run in a background job.
  */
 class MediaService {
 	public function __construct(
 		private MediaStorage $storage,
 		private Mp4Probe $mp4Probe,
+		private DeliveryModes $modes,
 		private IJobList $jobList,
 		private IRootFolder $rootFolder,
 		private ISecureRandom $random,
@@ -40,6 +44,7 @@ class MediaService {
 		$screening->setMediaProgress(0);
 		$screening->setMediaError(null);
 		$screening->setMediaWarning(null);
+		$screening->setMediaMode(null);
 		$screening->setDurationMs(null);
 
 		$file = $this->sourceFile($screening);
@@ -53,6 +58,10 @@ class MediaService {
 
 		if ($screening->getDeliveryMode() === Screening::MODE_MP4) {
 			$this->checkMp4($screening, $file);
+			return;
+		}
+		if ($screening->getDeliveryMode() === Screening::MODE_AUTO) {
+			$this->prepareAuto($screening, $file);
 			return;
 		}
 
@@ -108,26 +117,63 @@ class MediaService {
 		return $stream;
 	}
 
+	/**
+	 * Auto: an MP4 every browser plays is served as it is, right away.
+	 * Anything else is converted in the background, if this server can.
+	 */
+	private function prepareAuto(Screening $screening, File $file): void {
+		if (in_array($file->getMimetype(), ScreeningService::MP4_MIMES, true)) {
+			try {
+				$info = $this->probeMp4($file);
+			} catch (MediaException) {
+				// Not readable as MP4 here; ffmpeg may still manage.
+				$info = null;
+			}
+			if ($info !== null && Mp4Probe::browserSafe($info)) {
+				$screening->setMediaMode(Screening::MEDIA_MODE_DIRECT);
+				$this->markReady($screening, $info);
+				return;
+			}
+		}
+		if (!$this->modes->transcodeEnabled()) {
+			$screening->setMediaStatus(Screening::MEDIA_ERROR);
+			$screening->setMediaError('Browsers can\'t play this file as it is, and converting it needs server transcoding, which is off. An admin can turn it on under Administration settings → Screenings (it needs ffmpeg).');
+			return;
+		}
+		$screening->setMediaStatus(Screening::MEDIA_PENDING);
+	}
+
 	private function checkMp4(Screening $screening, File $file): void {
 		try {
-			$stream = self::seekableStream($file);
-			try {
-				$info = $this->mp4Probe->probe($stream, $file->getSize());
-			} finally {
-				fclose($stream);
-			}
-			if ($info->videoCodec === null) {
-				throw new MediaException('This MP4 has no video track');
-			}
+			$info = $this->probeMp4($file);
 		} catch (MediaException $e) {
 			$screening->setMediaStatus(Screening::MEDIA_ERROR);
 			$screening->setMediaError($e->getMessage());
 			return;
 		}
-
 		$warnings = Mp4Probe::warnings($info);
-		$screening->setDurationMs($info->durationMs);
 		$screening->setMediaWarning($warnings === [] ? null : implode("\n", $warnings));
+		$this->markReady($screening, $info);
+	}
+
+	/**
+	 * @throws MediaException
+	 */
+	private function probeMp4(File $file): Mp4Info {
+		$stream = self::seekableStream($file);
+		try {
+			$info = $this->mp4Probe->probe($stream, $file->getSize());
+		} finally {
+			fclose($stream);
+		}
+		if ($info->videoCodec === null) {
+			throw new MediaException('This MP4 has no video track');
+		}
+		return $info;
+	}
+
+	private function markReady(Screening $screening, Mp4Info $info): void {
+		$screening->setDurationMs($info->durationMs);
 		$screening->setMediaProgress(100);
 		$screening->setMediaStatus(Screening::MEDIA_READY);
 	}

@@ -54,6 +54,13 @@ class ProcessMedia extends Command {
 		// screening becomes stale and discards its results.
 		$this->media->prepare($screening);
 		$this->mapper->update($screening);
+		// Auto decides right away when the file plays as it is, or can't be converted here.
+		if ($screening->getMediaStatus() !== Screening::MEDIA_PENDING) {
+			$output->writeln($screening->getMediaStatus() === Screening::MEDIA_READY
+				? 'Auto plays this file directly; nothing to process.'
+				: 'Result: error (' . $screening->getMediaError() . ')');
+			return $screening->getMediaStatus() === Screening::MEDIA_READY ? 0 : 1;
+		}
 
 		$bar = new ProgressBar($output, 100);
 		$bar->start();

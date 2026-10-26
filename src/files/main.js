@@ -33,11 +33,13 @@ document.addEventListener('visibilitychange', () => {
 
 /** The delivery mode for a node, or null when it can't become a screening. */
 function deliveryMode(node) {
-	if (node.mime === 'video/mp4') {
-		return 'mp4'
-	}
 	if (PLAYLIST_MIMES.includes(node.mime) || node.basename.toLowerCase().endsWith('.m3u8')) {
 		return 'hls'
+	}
+	// Auto plays what browsers can and converts the rest. Nextcloud has no
+	// type for MXF; see ScreeningService::OTHER_VIDEO_EXTENSIONS.
+	if (node.mime?.startsWith('video/') || node.basename.toLowerCase().endsWith('.mxf')) {
+		return 'auto'
 	}
 	return null
 }

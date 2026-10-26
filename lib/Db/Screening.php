@@ -26,6 +26,8 @@ use OCP\AppFramework\Db\Entity;
  * @method void setMediaError(?string $mediaError)
  * @method ?string getMediaToken()
  * @method void setMediaToken(?string $mediaToken)
+ * @method ?string getMediaMode()
+ * @method void setMediaMode(?string $mediaMode)
  * @method ?string getMediaWarning()
  * @method void setMediaWarning(?string $mediaWarning)
  * @method ?int getDurationMs()
@@ -55,7 +57,12 @@ class Screening extends Entity implements JsonSerializable {
 	public const MODE_MP4 = 'mp4';
 	public const MODE_HLS = 'hls';
 	public const MODE_TRANSCODE = 'transcode';
-	public const MODES = [self::MODE_MP4, self::MODE_HLS, self::MODE_TRANSCODE];
+	/** Plays browser-ready MP4s directly and converts everything else. */
+	public const MODE_AUTO = 'auto';
+	public const MODES = [self::MODE_AUTO, self::MODE_MP4, self::MODE_HLS, self::MODE_TRANSCODE];
+
+	/** media_mode when Auto plays the file as it is; otherwise a Transcoder::MODE_* plan. */
+	public const MEDIA_MODE_DIRECT = 'direct';
 
 	public const MEDIA_NONE = 'none';
 	public const MEDIA_PENDING = 'pending';
@@ -73,6 +80,7 @@ class Screening extends Entity implements JsonSerializable {
 	protected $mediaError;
 	protected $mediaToken;
 	protected $mediaWarning;
+	protected $mediaMode;
 	protected $durationMs;
 	protected $passwordHash;
 	protected $expiresAt;
@@ -98,6 +106,18 @@ class Screening extends Entity implements JsonSerializable {
 		$this->addType('updatedAt', 'integer');
 	}
 
+	/**
+	 * How the current media is served: MODE_MP4 (the file itself), MODE_HLS
+	 * (a packaged playlist) or MODE_TRANSCODE (ffmpeg output). Auto resolves
+	 * to MODE_MP4 or MODE_TRANSCODE, depending on what it chose.
+	 */
+	public function servedAs(): string {
+		if ($this->deliveryMode === self::MODE_AUTO) {
+			return $this->mediaMode === self::MEDIA_MODE_DIRECT ? self::MODE_MP4 : self::MODE_TRANSCODE;
+		}
+		return $this->deliveryMode;
+	}
+
 	public function isExpired(int $now): bool {
 		return $this->expiresAt !== null && $this->expiresAt <= $now;
 	}
@@ -113,6 +133,7 @@ class Screening extends Entity implements JsonSerializable {
 			'mediaProgress' => $this->mediaProgress,
 			'mediaError' => $this->mediaError,
 			'mediaWarning' => $this->mediaWarning,
+			'mediaMode' => $this->mediaMode,
 			'durationMs' => $this->durationMs,
 			'hasPassword' => $this->passwordHash !== null,
 			'expiresAt' => $this->expiresAt,

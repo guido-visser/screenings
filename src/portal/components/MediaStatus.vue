@@ -6,6 +6,9 @@
 				· {{ t('screenings', 'Duration {duration}', { duration: formatDuration(screening.durationMs) }) }}
 			</span>
 		</p>
+		<p v-if="autoChoice" class="media-status__line">
+			{{ autoChoice }}
+		</p>
 
 		<template v-if="screening.mediaStatus === 'pending' || screening.mediaStatus === 'processing'">
 			<NcProgressBar :value="screening.mediaProgress" size="medium" />
@@ -65,6 +68,18 @@ const statusLabel = computed(() => {
 	}
 	return statusLabels[s.mediaStatus] ?? s.mediaStatus
 })
+
+const autoChoices = {
+	direct: t('screenings', 'Auto: browsers play this file as it is, so it streams directly.'),
+	remux: t('screenings', 'Auto: repackaged into encrypted HLS without re-encoding, so there is no quality loss.'),
+	audio: t('screenings', 'Auto: the picture is kept as it is; only the sound is converted to AAC.'),
+	full: t('screenings', 'Auto: converted to H.264 in up to three qualities (1080p, 720p, 480p). This takes a while for a long film.'),
+}
+
+/** What Auto decided, once it has (null for the other modes). */
+const autoChoice = computed(() => props.screening.deliveryMode === 'auto'
+	? autoChoices[props.screening.mediaMode] ?? null
+	: null)
 
 const warnings = computed(() => (props.screening.mediaWarning ?? '').split('\n').filter(Boolean))
 

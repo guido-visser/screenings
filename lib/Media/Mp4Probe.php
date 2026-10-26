@@ -17,6 +17,13 @@ class Mp4Probe {
 	/** Codecs every current browser plays from an MP4. */
 	public const BROWSER_VIDEO_CODECS = ['avc1', 'avc3', 'av01', 'vp09'];
 	public const BROWSER_AUDIO_CODECS = ['mp4a', 'Opus', 'fLaC'];
+	/**
+	 * H.264 profiles browsers decode: Baseline, Main, Extended, High. High 10,
+	 * High 4:2:2 and High 4:4:4 (10-bit or pro exports) don't play.
+	 */
+	public const BROWSER_AVC_PROFILES = [66, 77, 88, 100];
+	/** Size of a VisualSampleEntry before its child boxes (header included). */
+	private const VISUAL_ENTRY_HEADER = 86;
 
 	/**
 	 * @param resource $stream seekable stream positioned anywhere
@@ -66,31 +73,35 @@ class Mp4Probe {
 	private function parseMoov(string $moov, bool $faststart, int $moovOffset, int $moovSize): Mp4Info {
 		$durationMs = null;
 		$videoCodec = null;
+		$videoProfile = null;
 		$audioCodec = null;
 
 		foreach ($this->boxes($moov, 0, strlen($moov)) as [$type, $start, $end]) {
 			if ($type === 'mvhd') {
 				$durationMs = $this->parseMvhd(substr($moov, $start, $end - $start));
 			} elseif ($type === 'trak') {
-				[$handler, $codec] = $this->parseTrak($moov, $start, $end);
+				[$handler, $codec, $profile] = $this->parseTrak($moov, $start, $end);
 				if ($handler === 'vide' && $videoCodec === null) {
 					$videoCodec = $codec;
+					$videoProfile = $profile;
 				} elseif ($handler === 'soun' && $audioCodec === null) {
 					$audioCodec = $codec;
 				}
 			}
 		}
 
-		return new Mp4Info($durationMs, $faststart, $videoCodec, $audioCodec, $moovOffset, $moovSize);
+		return new Mp4Info($durationMs, $faststart, $videoCodec, $audioCodec, $moovOffset, $moovSize, $videoProfile);
 	}
 
 	/**
-	 * @return array{?string, ?string} handler type ("vide", "soun", …) and codec fourcc
+	 * @return array{?string, ?string, ?int} handler type ("vide", "soun", …), codec fourcc,
+	 *                                       and for H.264 the profile_idc
 	 */
 	private function parseTrak(string $data, int $start, int $end): array {
 		$handler = null;
 		$codec = null;
-		$walk = function (int $from, int $to) use (&$walk, &$handler, &$codec, $data): void {
+		$profile = null;
+		$walk = function (int $from, int $to) use (&$walk, &$handler, &$codec, &$profile, $data): void {
 			foreach ($this->boxes($data, $from, $to) as [$type, $s, $e]) {
 				if (in_array($type, self::CONTAINERS, true)) {
 					$walk($s, $e);
@@ -100,11 +111,28 @@ class Mp4Probe {
 				} elseif ($type === 'stsd' && $e - $s >= 16) {
 					// version/flags (4), entry_count (4), then the first entry's size (4) and type (4)
 					$codec = substr($data, $s + 12, 4);
+					if ($codec === 'avc1' || $codec === 'avc3') {
+						$entryEnd = min($e, $s + 8 + unpack('N', substr($data, $s + 8, 4))[1]);
+						$profile = $this->avcProfile($data, $s + 8 + self::VISUAL_ENTRY_HEADER, $entryEnd);
+					}
 				}
 			}
 		};
 		$walk($start, $end);
-		return [$handler, $codec];
+		return [$handler, $codec, $profile];
+	}
+
+	/**
+	 * profile_idc from the avcC box among a sample entry's children:
+	 * configurationVersion (1), then AVCProfileIndication (1).
+	 */
+	private function avcProfile(string $data, int $from, int $to): ?int {
+		foreach ($this->boxes($data, $from, $to) as [$type, $s, $e]) {
+			if ($type === 'avcC' && $e - $s >= 2) {
+				return ord($data[$s + 1]);
+			}
+		}
+		return null;
 	}
 
 	private function parseMvhd(string $body): ?int {
@@ -199,22 +227,38 @@ class Mp4Probe {
 	}
 
 	/**
-	 * Owner-facing warnings for a playable but problematic MP4.
+	 * Whether every current browser plays this MP4 as it is. An unknown H.264
+	 * profile counts as fine: older files may lack the avcC box we read.
+	 */
+	public static function browserSafe(Mp4Info $info): bool {
+		if (!in_array($info->videoCodec, self::BROWSER_VIDEO_CODECS, true)) {
+			return false;
+		}
+		if (in_array($info->videoCodec, ['avc1', 'avc3'], true) && $info->videoProfile !== null
+			&& !in_array($info->videoProfile, self::BROWSER_AVC_PROFILES, true)) {
+			return false;
+		}
+		return $info->audioCodec === null || in_array($info->audioCodec, self::BROWSER_AUDIO_CODECS, true);
+	}
+
+	/**
+	 * Owner-facing warnings for an MP4 played directly (Direct MP4 mode).
+	 * Auto never plays such files directly; it converts them.
 	 *
 	 * @return string[]
 	 */
 	public static function warnings(Mp4Info $info): array {
 		$warnings = [];
-		if (!$info->faststart) {
-			$warnings[] = 'The MP4 index is at the end of the file, so playback starts slower and seeking is less reliable. Re-export with "fast start" (ffmpeg -movflags +faststart).';
-		}
 		if ($info->videoCodec !== null && !in_array($info->videoCodec, self::BROWSER_VIDEO_CODECS, true)) {
 			$warnings[] = in_array($info->videoCodec, ['hvc1', 'hev1'], true)
-				? 'The video is HEVC (H.265), which many browsers cannot play (e.g. Firefox and most Chrome on Windows/Linux). Re-export as H.264 or use Server transcode.'
-				: sprintf('The video codec "%s" may not play in browsers. Re-export as H.264.', $info->videoCodec);
+				? 'The video is HEVC (H.265), which many browsers cannot play (e.g. Firefox and most Chrome on Windows/Linux). Choose Auto to convert it.'
+				: sprintf('The video codec "%s" may not play in browsers. Choose Auto to convert it.', $info->videoCodec);
+		} elseif ($info->videoProfile !== null && in_array($info->videoCodec, ['avc1', 'avc3'], true)
+			&& !in_array($info->videoProfile, self::BROWSER_AVC_PROFILES, true)) {
+			$warnings[] = 'The video is a 10-bit or 4:2:2/4:4:4 H.264 export, which browsers cannot play. Choose Auto to convert it.';
 		}
 		if ($info->audioCodec !== null && !in_array($info->audioCodec, self::BROWSER_AUDIO_CODECS, true)) {
-			$warnings[] = sprintf('The audio codec "%s" may not play in browsers. Re-export with AAC audio.', $info->audioCodec);
+			$warnings[] = sprintf('The audio codec "%s" may not play in browsers. Choose Auto to convert it.', $info->audioCodec);
 		}
 		return $warnings;
 	}

@@ -102,4 +102,15 @@ class HlsPlaylistTest extends TestCase {
 		$this->assertSame([360], array_keys(Transcoder::renditions(361)));
 		$this->assertSame([720], array_keys(Transcoder::renditions(null)));
 	}
+
+	public function testAutoPlan(): void {
+		$h264 = ['videoCodec' => 'h264', 'pixFmt' => 'yuv420p', 'hasAudio' => true, 'audioCodec' => 'aac'];
+		$this->assertSame(Transcoder::MODE_REMUX, Transcoder::plan($h264), 'H.264 + AAC, e.g. in MKV');
+		$this->assertSame(Transcoder::MODE_REMUX, Transcoder::plan(['hasAudio' => false, 'audioCodec' => null] + $h264), 'no audio');
+		$this->assertSame(Transcoder::MODE_AUDIO, Transcoder::plan(['audioCodec' => 'pcm_s24le'] + $h264), 'PCM audio');
+		$this->assertSame(Transcoder::MODE_AUDIO, Transcoder::plan(['audioCodec' => 'ac3'] + $h264), 'Dolby audio');
+		$this->assertSame(Transcoder::MODE_FULL, Transcoder::plan(['pixFmt' => 'yuv422p10le'] + $h264), '10-bit 4:2:2 H.264');
+		$this->assertSame(Transcoder::MODE_FULL, Transcoder::plan(['videoCodec' => 'hevc'] + $h264), 'HEVC');
+		$this->assertSame(Transcoder::MODE_FULL, Transcoder::plan(['videoCodec' => 'prores', 'pixFmt' => 'yuv422p10le'] + $h264), 'ProRes');
+	}
 }

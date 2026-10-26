@@ -50,11 +50,12 @@ Pages:
 
 ## Video delivery modes
 
-Each screening picks one; see [docs/prepare-hls.md](docs/prepare-hls.md) for exporting HLS.
+Each screening picks one; new screenings use Auto. See [docs/prepare-hls.md](docs/prepare-hls.md) for exporting HLS.
 
 | Mode | Server needs | What happens |
 |---|---|---|
-| Direct MP4 | nothing | The MP4's header is checked straight away (fast start, duration, browser-playable codecs). Not encrypted. |
+| **Auto** (default) | nothing for browser-ready MP4s; ffmpeg for the rest | MP4/MOV files every browser plays (H.264 8-bit, AV1 or VP9 with AAC, Opus or FLAC) stream directly, decided at once. Everything else is converted in the background with the cheapest plan that works: **repackage** (H.264 in another container, e.g. MKV), **audio only** (H.264 with PCM or Dolby sound), or **full** (ProRes, DNxHR/MXF, HEVC, 10-bit or 4:2:2 H.264, …). The portal shows what it chose. |
+| Direct MP4 | nothing | The MP4's header is checked straight away (duration, browser-playable codecs). Not encrypted. |
 | Pre-packaged HLS | nothing | A background job encrypts the uploaded HLS segments (AES-128, one IV per segment) into app data. |
 | Server transcode | ffmpeg + ffprobe, enabled in *Administration settings → Screenings* | A background job converts the video with ffmpeg (several qualities, or remux-only), then encrypts it the same way. |
 

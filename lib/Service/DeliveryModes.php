@@ -26,7 +26,9 @@ class DeliveryModes {
 	 * @return string[]
 	 */
 	public function available(): array {
-		$modes = [Screening::MODE_MP4, Screening::MODE_HLS];
+		// Auto is always offered: without transcoding it still plays
+		// browser-ready MP4s, and explains what other files need.
+		$modes = [Screening::MODE_AUTO, Screening::MODE_MP4, Screening::MODE_HLS];
 		if ($this->transcodeEnabled()) {
 			$modes[] = Screening::MODE_TRANSCODE;
 		}

@@ -57,8 +57,11 @@
 				</ul>
 
 				<ul v-else-if="question.kind === 'text'" class="answers__texts">
-					<li v-for="viewer in textAnswers(question)" :key="viewer.inviteId">
+					<li v-for="viewer in textAnswers(question)"
+						:key="viewer.inviteId"
+						:class="{ 'answers__text--fresh': fresh.has(viewer.inviteId) }">
 						<strong>{{ viewer.name }}</strong>
+						<span v-if="fresh.has(viewer.inviteId)" class="answers__new">{{ fresh.get(viewer.inviteId) }}</span>
 						<p>{{ viewer.text }}</p>
 					</li>
 				</ul>
@@ -82,9 +85,12 @@
 							</tr>
 						</thead>
 						<tbody>
-							<tr v-for="viewer in data.viewers" :key="viewer.inviteId">
+							<tr v-for="viewer in data.viewers"
+								:key="viewer.inviteId"
+								:class="{ 'answers__row--fresh': fresh.has(viewer.inviteId) }">
 								<th scope="row">
 									<a :href="screeningHash(screening.id, 'viewer', viewer.inviteId)">{{ viewer.name }}</a>
+									<span v-if="fresh.has(viewer.inviteId)" class="answers__new">{{ fresh.get(viewer.inviteId) }}</span>
 								</th>
 								<td v-for="question in data.questions" :key="question.id">
 									{{ cell(question, viewer.answers[question.id]) }}
@@ -103,15 +109,16 @@
 
 <script setup>
 import { mdiCommentQuestionOutline, mdiDownload } from '@mdi/js'
-import { showError } from '@nextcloud/dialogs'
+import { showError, showInfo } from '@nextcloud/dialogs'
 import { getLanguage, n, t } from '@nextcloud/l10n'
 import NcButton from '@nextcloud/vue/components/NcButton'
 import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcIconSvgWrapper from '@nextcloud/vue/components/NcIconSvgWrapper'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import api, { errorMessage } from '../api.js'
 import { formatRelative } from '../format.js'
+import { startPolling } from '../poller.js'
 import { screeningHash } from '../router.js'
 
 const props = defineProps({
@@ -119,6 +126,31 @@ const props = defineProps({
 })
 
 const data = ref(null)
+// Viewers who answered (or changed answers) while the page was open: inviteId => label.
+const fresh = ref(new Map())
+let stopPolling = null
+
+const LIVE_POLL_MS = 5000
+
+/** Takes new answers in place, marking and announcing who answered. */
+function apply(next) {
+	const before = new Map((data.value?.viewers ?? []).map((v) => [v.inviteId, v.answeredAt]))
+	if (data.value) {
+		const marks = new Map(fresh.value)
+		for (const viewer of next.viewers) {
+			const old = before.get(viewer.inviteId)
+			if (old === undefined) {
+				marks.set(viewer.inviteId, t('screenings', 'New'))
+				showInfo(t('screenings', '{name} answered your questions', { name: viewer.name }))
+			} else if (viewer.answeredAt > old) {
+				marks.set(viewer.inviteId, t('screenings', 'Updated'))
+				showInfo(t('screenings', '{name} changed their answers', { name: viewer.name }))
+			}
+		}
+		fresh.value = marks
+	}
+	data.value = next
+}
 
 function share(count, total) {
 	return total ? Math.round((count / total) * 100) + '%' : '0%'
@@ -147,12 +179,15 @@ function cell(question, value) {
 
 onMounted(async () => {
 	try {
-		data.value = await api.answers(props.screening.id)
+		apply(await api.answers(props.screening.id))
 	} catch (error) {
 		showError(errorMessage(error, t('screenings', 'Could not load the answers')))
 		data.value = { asked: 0, questions: [], viewers: [] }
 	}
+	stopPolling = startPolling(async () => apply(await api.answers(props.screening.id)), LIVE_POLL_MS)
 })
+
+onBeforeUnmount(() => stopPolling?.())
 </script>
 
 <style scoped>
@@ -273,6 +308,35 @@ onMounted(async () => {
 	margin: 2px 0 0;
 	white-space: pre-line;
 	overflow-wrap: anywhere;
+}
+
+.answers__new {
+	margin-inline-start: 6px;
+	padding: 0 6px;
+	color: var(--color-primary-element-text);
+	background: var(--color-primary-element);
+	border-radius: var(--border-radius-pill, 10px);
+	font-size: 0.75em;
+	font-weight: 600;
+}
+
+/* Answers that just arrived glow once. */
+.answers__row--fresh,
+.answers__text--fresh {
+	animation: answers-arrive 3s ease-out;
+}
+
+@keyframes answers-arrive {
+	from {
+		background: var(--color-primary-element-light);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.answers__row--fresh,
+	.answers__text--fresh {
+		animation: none;
+	}
 }
 
 .answers__table-wrap {

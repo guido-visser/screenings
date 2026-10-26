@@ -59,6 +59,16 @@
 				</div>
 			</div>
 
+			<p v-if="liveViewers.length" class="notes-review__live" aria-live="polite">
+				<span class="notes-review__live-dot" aria-hidden="true" />
+				<span v-for="(viewer, index) in liveViewers" :key="viewer.inviteId">
+					{{ index ? ' · ' : '' }}<strong>{{ viewer.name }}</strong>
+					{{ viewer.playing
+						? t('screenings', 'is watching at {time}', { time: timecode(viewer.position) })
+						: t('screenings', 'paused at {time}', { time: timecode(viewer.position) }) }}
+				</span>
+			</p>
+
 			<div class="notes-review__body">
 				<div class="notes-review__stage">
 					<ReviewPlayer v-if="preview?.ready"
@@ -66,6 +76,7 @@
 						:config="preview"
 						:notes="visibleNotes"
 						:selected="cardNote"
+						:live-viewers="liveViewers"
 						@select="select"
 						@close="cardNote = null"
 						@time="onTime" />
@@ -93,6 +104,7 @@
 							:class="{
 								'notes-review__item--selected': cardNote?.id === note.id,
 								'notes-review__item--current': currentId === note.id,
+								'notes-review__item--fresh': fresh.has(note.id),
 							}"
 							:style="{ '--viewer-colour': note.colour }">
 							<button class="notes-review__item-main"
@@ -101,6 +113,7 @@
 								<span class="notes-review__item-head">
 									<span class="notes-review__dot" aria-hidden="true" />
 									<strong class="notes-review__item-name">{{ note.name }}</strong>
+									<span v-if="fresh.has(note.id)" class="notes-review__new">{{ t('screenings', 'New') }}</span>
 									<span class="notes-review__item-time">{{ timecode(note.position) }}</span>
 								</span>
 								<span class="notes-review__item-body">{{ note.body }}</span>
@@ -137,7 +150,7 @@ import {
 	mdiLinkVariant,
 	mdiSubtitlesOutline,
 } from '@mdi/js'
-import { showError } from '@nextcloud/dialogs'
+import { showError, showInfo } from '@nextcloud/dialogs'
 import { t } from '@nextcloud/l10n'
 import NcActionButton from '@nextcloud/vue/components/NcActionButton'
 import NcActionLink from '@nextcloud/vue/components/NcActionLink'
@@ -146,10 +159,11 @@ import NcEmptyContent from '@nextcloud/vue/components/NcEmptyContent'
 import NcIconSvgWrapper from '@nextcloud/vue/components/NcIconSvgWrapper'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import api, { errorMessage } from '../api.js'
 import { copyLink } from '../clipboard.js'
 import { formatDuration, formatRelative } from '../format.js'
+import { startPolling } from '../poller.js'
 import { screeningHash } from '../router.js'
 import ReviewPlayer from './ReviewPlayer.vue'
 
@@ -176,7 +190,14 @@ const MANUAL_SCROLL_MS = 4000
 const loading = ref(true)
 const preview = ref(null)
 const notes = ref([])
-const viewers = ref([])
+// Notes that arrived while the page was open; marked until selected.
+const fresh = ref(new Set())
+// Who is watching right now: { inviteId, name, position, playing, colour }.
+const liveViewers = ref([])
+// A viewer keeps their colour while the page is open, even when an earlier
+// viewer's notes are deleted.
+const colourOf = new Map()
+let stopPolling = null
 const filter = ref(null)
 const cardNote = ref(null)
 const currentId = ref(null)
@@ -186,6 +207,85 @@ const list = ref(null)
 const itemRefs = new Map()
 let manualScrollUntil = 0
 let ownScroll = false
+
+/** LIVE_POLL_MS: same rhythm as the dashboard's live status. */
+const LIVE_POLL_MS = 5000
+
+function colourFor(inviteId) {
+	if (!colourOf.has(inviteId)) {
+		colourOf.set(inviteId, COLOURS[colourOf.size % COLOURS.length])
+	}
+	return colourOf.get(inviteId)
+}
+
+/** The viewer chips: everyone with notes, in colour order. */
+const viewers = computed(() => {
+	const byInvite = new Map()
+	for (const note of notes.value) {
+		const viewer = byInvite.get(note.inviteId) ?? { inviteId: note.inviteId, name: note.name, hex: note.colour, count: 0 }
+		viewer.count++
+		byInvite.set(note.inviteId, viewer)
+	}
+	const order = [...colourOf.keys()]
+	return [...byInvite.values()].sort((a, b) => order.indexOf(a.inviteId) - order.indexOf(b.inviteId))
+})
+
+/**
+ * Takes the server's notes: the first time as they are, later as changes.
+ * New notes are marked and announced, edited ones replaced, deleted ones
+ * removed, without touching the player.
+ */
+function applyNotes(data, initial) {
+	for (const viewer of [...data.viewers].sort((a, b) => a.colour - b.colour)) {
+		colourFor(viewer.inviteId)
+	}
+	const names = new Map(data.viewers.map((v) => [v.inviteId, v.name]))
+	const known = new Map(notes.value.map((n) => [n.id, n]))
+	const incoming = data.notes.map((note) => {
+		const old = known.get(note.id)
+		// Unchanged notes keep their object, so the card and list stay put.
+		if (old && old.updatedAt === note.updatedAt) {
+			return old
+		}
+		return { ...note, name: names.get(note.inviteId) ?? '?', colour: colourFor(note.inviteId) }
+	})
+	const added = initial ? [] : incoming.filter((note) => !known.has(note.id))
+
+	notes.value = incoming
+	const ids = new Set(incoming.map((n) => n.id))
+	if (cardNote.value) {
+		cardNote.value = incoming.find((n) => n.id === cardNote.value.id) ?? null
+	}
+	if (filter.value !== null && !incoming.some((n) => n.inviteId === filter.value)) {
+		filter.value = null
+	}
+	if (added.length) {
+		fresh.value = new Set([...[...fresh.value].filter((id) => ids.has(id)), ...added.map((n) => n.id)])
+		announce(added)
+	}
+}
+
+function announce(added) {
+	const options = { timeout: 8000 }
+	if (added.length === 1) {
+		const note = added[0]
+		showInfo(t('screenings', '{name} left a note at {time}. Click to see it.', { name: note.name, time: timecode(note.position) }), { ...options, onClick: () => select(note) })
+	} else {
+		showInfo(t('screenings', '{count} new notes', { count: added.length }), options)
+	}
+}
+
+async function refresh() {
+	const [data, live] = await Promise.all([api.notes(props.screening.id), api.live(props.screening.id)])
+	applyNotes(data, false)
+	liveViewers.value = Object.entries(live.live).map(([inviteId, state]) => ({
+		inviteId: Number(inviteId),
+		name: state.name ?? '?',
+		position: state.positionS ?? 0,
+		playing: state.playing,
+		colour: colourOf.get(Number(inviteId)) ?? null,
+	}))
+}
 
 const visibleNotes = computed(() => filter.value === null
 	? notes.value
@@ -250,6 +350,9 @@ function onListScroll() {
  * @param {boolean} play start playing there (default: the owner's choice)
  */
 function select(note, play = playAfterJump.value) {
+	if (fresh.value.has(note.id)) {
+		fresh.value = new Set([...fresh.value].filter((id) => id !== note.id))
+	}
 	cardNote.value = note
 	currentId.value = note.id
 	player.value?.seekTo(note.position, play)
@@ -289,12 +392,7 @@ async function remove(note) {
 	try {
 		await api.deleteNote(note.id)
 		notes.value = notes.value.filter((n) => n.id !== note.id)
-		const viewer = viewers.value.find((v) => v.inviteId === note.inviteId)
-		if (viewer) {
-			viewer.count--
-		}
-		viewers.value = viewers.value.filter((v) => v.count > 0)
-		if (filter.value !== null && !viewers.value.some((v) => v.inviteId === filter.value)) {
+		if (filter.value !== null && !notes.value.some((n) => n.inviteId === filter.value)) {
 			filter.value = null
 		}
 		if (cardNote.value?.id === note.id) {
@@ -309,18 +407,14 @@ onMounted(async () => {
 	try {
 		const [config, data] = await Promise.all([api.preview(props.screening.id), api.notes(props.screening.id)])
 		preview.value = config
-		viewers.value = data.viewers.map((v) => ({ ...v, hex: COLOURS[v.colour % COLOURS.length] }))
-		const byInvite = new Map(viewers.value.map((v) => [v.inviteId, v]))
-		notes.value = data.notes.map((note) => ({
-			...note,
-			name: byInvite.get(note.inviteId)?.name ?? '?',
-			colour: byInvite.get(note.inviteId)?.hex ?? '#fff',
-		}))
+		applyNotes(data, true)
 	} catch (error) {
 		showError(errorMessage(error, t('screenings', 'Could not load the notes')))
 	} finally {
 		loading.value = false
 	}
+	stopPolling = startPolling(refresh, LIVE_POLL_MS)
+	refresh().catch(() => {})
 	if (props.noteId !== null) {
 		const note = notes.value.find((n) => n.id === props.noteId)
 		if (note) {
@@ -331,6 +425,8 @@ onMounted(async () => {
 		}
 	}
 })
+
+onBeforeUnmount(() => stopPolling?.())
 </script>
 
 <style scoped>
@@ -442,6 +538,61 @@ onMounted(async () => {
 
 .notes-review__item:last-child {
 	border-bottom: 0;
+}
+
+.notes-review__live {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin: 0 0 8px;
+	color: var(--color-text-maxcontrast);
+}
+
+.notes-review__live strong {
+	color: var(--color-main-text);
+}
+
+.notes-review__live-dot {
+	width: 8px;
+	height: 8px;
+	margin-right: 4px;
+	border-radius: 50%;
+	background: var(--color-success);
+	animation: notes-review-pulse 2s ease-in-out infinite;
+}
+
+@keyframes notes-review-pulse {
+	50% {
+		opacity: 0.35;
+	}
+}
+
+.notes-review__new {
+	padding: 0 6px;
+	color: var(--color-primary-element-text);
+	background: var(--color-primary-element);
+	border-radius: var(--border-radius-pill, 10px);
+	font-size: 0.75em;
+	font-weight: 600;
+}
+
+/* A note that just arrived glows once. */
+.notes-review__item--fresh {
+	animation: notes-review-arrive 3s ease-out;
+}
+
+@keyframes notes-review-arrive {
+	from {
+		background: var(--color-primary-element-light);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.notes-review__live-dot,
+	.notes-review__item--fresh {
+		animation: none;
+	}
 }
 
 .notes-review__item--current {

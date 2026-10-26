@@ -65,6 +65,17 @@
 				</div>
 				<div class="review-player__thumb" :style="{ left: percent(currentTime) + '%' }" />
 
+				<!-- Viewers watching right now, where they are. -->
+				<div v-for="viewer in liveViewers"
+					:key="'live-' + viewer.inviteId"
+					class="review-player__live"
+					:class="{ 'review-player__live--playing': viewer.playing }"
+					:style="{ left: percent(viewer.position) + '%', '--viewer-colour': viewer.colour ?? '#fff' }"
+					:title="viewer.name + ' · ' + timecode(viewer.position)"
+					aria-hidden="true">
+					<span class="review-player__live-name">{{ viewer.name }}</span>
+				</div>
+
 				<button v-for="group in groups"
 					:key="group.key"
 					class="review-player__marker"
@@ -175,6 +186,8 @@ const props = defineProps({
 	notes: { type: Array, default: () => [] },
 	/** The note shown as a card over the video, or null. */
 	selected: { type: Object, default: null },
+	/** Viewers watching now: { inviteId, name, position, playing, colour }. */
+	liveViewers: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['select', 'close', 'time'])
 
@@ -599,6 +612,52 @@ onBeforeUnmount(() => {
 	background: #fff;
 	border-radius: 50%;
 	pointer-events: none;
+}
+
+/* A pin above the timeline per live viewer. Between heartbeats (5 s) it
+   glides on while they play, so it doesn't jump. */
+.review-player__live {
+	position: absolute;
+	z-index: 1;
+	bottom: calc(50% + 6px);
+	transform: translateX(-50%);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	pointer-events: none;
+}
+
+.review-player__live--playing {
+	transition: left 5s linear;
+}
+
+.review-player__live::after {
+	content: '';
+	width: 0;
+	height: 0;
+	border: 5px solid transparent;
+	border-top: 6px solid var(--viewer-colour);
+	border-bottom: 0;
+}
+
+.review-player__live-name {
+	max-width: 120px;
+	padding: 0 5px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 16px;
+	color: #000;
+	background: var(--viewer-colour);
+	border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.review-player__live--playing {
+		transition: none;
+	}
 }
 
 .review-player .review-player__marker {

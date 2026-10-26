@@ -1,6 +1,6 @@
 # Handoff: Screenings (Nextcloud app)
 
-**State on 2026-10-26:** version **0.4.1** in `main` (the feedback feature, all three phases: viewer notes, the owner's review page, closing questions). **Not deployed**: production runs 0.3.12. `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
+**State on 2026-10-26:** version **0.4.2** in `main` (the feedback feature: viewer notes, the owner's review page, closing questions, and live updates of both). **Not deployed**: production runs 0.3.12. `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
 
 **Start here:** read the project skill `.claude/skills/screenings-dev/SKILL.md` before building, testing or deploying. It has the commands, the deploy script, the production quirks and the Windows/Docker pitfalls that cost a lot of time when rediscovered. User-facing behaviour is documented in the [README](../README.md); the original 8-phase plan is in [PLAN.md](PLAN.md) (done, partly superseded).
 
@@ -77,6 +77,7 @@ tests/Unit/                      104 tests: feedback (note text, position, open-
 - **Email designs:** placeholder values are always escaped (`{{x}}`, no raw form); scripts and event handlers are stripped; `{{link}}` is required. The preview iframe is `sandbox=""`.
 - **Notes:** the `note_added` event only keeps the note id; the dashboard adds the current text when listing events, so an edited or deleted note leaves no copy in the tracking log. Notes aren't covered by the retention job (the viewer gave them on purpose) but are deleted with their invite, screening or owner (`TrackingCleanupService`). The viewer only gets `notesUrl` in its player config when `Invite::mayLeaveNotes()`; every route checks it again and returns 404 otherwise or for another invite's note.
 - **Owner preview:** `StreamService` has one core per media type (`hlsContent`, `mp4Content`, `previewSubtitle`) with an optional `StreamContext`: a viewer's context applies the playhead window and budget, null (the owner) skips them. Viewer behaviour is unchanged (`leaktest.sh` still refuses at 92 s). The preview routes are GET with `NoCSRFRequired`, because hls.js and `<video>` fetch them directly; the login cookie and ownership (404 otherwise) authorize them.
+- **Live feedback pages:** `src/portal/poller.js` runs a refresh every 5 s while the tab is visible (and once when it becomes visible again), never overlapping. The Notes page re-fetches all notes plus `/live` (which now includes the viewer's name) and diffs by id and `updatedAt`: unchanged notes keep their object (the card and list don't flicker), new ones get a "New" mark and a clickable toast, viewers keep their colour for as long as the page is open. The Answers page diffs viewers by `answeredAt`. Full re-fetches are fine at this scale (dozens of notes); an ETag or `since` parameter would be the next step if screenings ever get hundreds.
 - **Questions:** saving the editor replaces the whole list; questions keep their id (and answers) while they exist, and lose their answers when deleted or when their kind changes. Answers are saved as a whole form and stored as text (rating "4", the option for a choice); an empty optional answer deletes the row. The player config carries `questions: {url, count, answered, pending}` only for invites with questions on and a screening that has questions; `pending` (finished earlier, never answered: an "ended" event and no answers) shows a reminder bar. The dialog is a modal `<dialog>` outside the player: the top layer also shows it over a fullscreen player. Public-page CSS centres form legends with an id selector (`#body-public form fieldset legend`), hence the id in viewer.css.
 - **Note notifications:** `FeedbackService::notifyOwner` marks the session's earlier notification processed and sends a new one with the session's note count. A failure there is logged and never fails saving the note. `INotification::setDateTime` needs a mutable `DateTime`.
 - **GeoIP:** the downloaded database lives in `<datadirectory>/screenings-geoip/`, because the reader needs a local file path.
@@ -117,7 +118,8 @@ Still open from that review (low risk on a server with few trusted accounts):
 | 64c54ac | Package build on Docker's own disk with a lockfile-keyed npm ci: deploy ~8 min → ~30 s, identical package |
 | 03d6f89 | 0.4.0: viewer notes (feedback phase 1): per-invite switch, note box in the player (N), markers, "My notes" list, notes in the owner's viewer timeline |
 | 5440f09 | Feedback phase 2: Notes tab with the owner's preview player, colour-coded markers, note card, following list, CSV/SRT export, dashboard tile, bundled notifications |
-| (this commit) | 0.4.1: feedback phase 3: closing questions (editor, per-invite switch, dialog at the end and "Give feedback", reminder, Feedback → Answers with summaries and CSV, notification) |
+| 5b8d3ac | 0.4.1: feedback phase 3: closing questions (editor, per-invite switch, dialog at the end and "Give feedback", reminder, Feedback → Answers with summaries and CSV, notification) |
+| (this commit) | 0.4.2: live Feedback pages: new/edited/deleted notes and answers appear within 5 s, live viewers on the review timeline |
 
 ## Production (details outside the repo)
 
@@ -150,7 +152,7 @@ Admin login: see `dev/.env` (user `admin`, email `admin@example.test`). Mailpit:
 | MP4 Leak | 16 | `T8i1fryhAcV903cATftOzmQfNJimA2pW` |
 | Moov Tester | 18 | `vmo2oh1c9wcOeVrgKExWN2OJH2iC2QBl` |
 | Subtitle Tester | 29 | `eZuvoZN5Y6Sw8DoRgDyIh9R63HzE5t5l` |
-| Auto 19 (notes and questions on; notes at 0:03, 2:05; answered) | 19 | `cGhz56wMdKFcD3aBA6Yw06C9w1y1Hk7C` |
+| Auto 19 (notes and questions on; a note at 0:03; answered) | 19 | `cGhz56wMdKFcD3aBA6Yw06C9w1y1Hk7C` |
 | Reviewer B (notes and questions on; 4 notes incl. 0:04, 0:06; answered) | 19 | `DazLnT51U8sW9wkXjqSeR4FV5YuN7KF1` |
 
 Test files are in the admin's Files under `/Films`: test-clip.mp4, slow-start.mp4, hevc.mp4, broken.mp4, long-1080p.mp4 (224 MB), ten-minutes.mp4 (+ `ten-minutes.*.srt`), moov-at-end.mp4, `auto-tests/`, `autosub/`, `Rough cut HLS/`, `Multi HLS/`.

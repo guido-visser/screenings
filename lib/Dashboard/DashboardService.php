@@ -105,7 +105,8 @@ class DashboardService {
 		foreach ($invites as $invite) {
 			$state = $this->liveState($byInvite[$invite->getId()] ?? []);
 			if ($state !== null) {
-				$live[$invite->getId()] = $state;
+				// The feedback pages show who is watching, by name.
+				$live[$invite->getId()] = $state + ['name' => $invite->getName()];
 			}
 		}
 		return ['now' => $this->time->getTime(), 'live' => (object)$live];

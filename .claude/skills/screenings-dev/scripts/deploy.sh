@@ -39,15 +39,26 @@ quiet() { grep -v -iE 'post-quantum|store now|be upgraded|pq.html' || true; }
 DOCKER=${DOCKER:-docker}
 command -v "$DOCKER" >/dev/null 2>&1 || DOCKER="/c/Program Files/Docker/Docker/resources/bin/docker.exe"
 
+# Single-quotes a value for the remote shell: ssh joins its arguments into
+# one command line, so "php -d memory_limit=512M" would otherwise split.
+shq() {
+	printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
 # Runs the remote part (stdin) with the settings as positional parameters.
 remote() {
+	args=""
+	for arg in "$DEPLOY_NC_DIR" "$DEPLOY_APPS_DIR" "$DEPLOY_PHP" "$@"; do
+		args="$args $(shq "$arg")"
+	done
 	if [ -n "${DEPLOY_CONTAINER:-}" ]; then
+		# The same quoted command line as over SSH, so tests cover the quoting.
 		MSYS_NO_PATHCONV=1 "$DOCKER" exec -i -u www-data -w /var/www "$DEPLOY_CONTAINER" \
-			sh -c 'HOME=/var/www; export HOME; cd; sh -s -- "$@"' sh "$DEPLOY_NC_DIR" "$DEPLOY_APPS_DIR" "$DEPLOY_PHP" "$@" 2>&1
+			sh -c "HOME=/var/www; export HOME; cd; sh -s --$args" 2>&1
 		return
 	fi
 	# shellcheck disable=SC2086
-	ssh $SSH_OPTS "$DEPLOY_SSH" sh -s -- "$DEPLOY_NC_DIR" "$DEPLOY_APPS_DIR" "$DEPLOY_PHP" "$@" 2>&1 | quiet
+	ssh $SSH_OPTS "$DEPLOY_SSH" "sh -s --$args" 2>&1 | quiet
 }
 
 upload() {

@@ -13,6 +13,7 @@ use OCA\Screenings\Service\EventLogger;
 use OCA\Screenings\Service\MailService;
 use OCA\Screenings\Service\OtpService;
 use OCA\Screenings\Service\SessionService;
+use OCA\Screenings\Service\TrackingNotice;
 use OCA\Screenings\Stream\StreamContext;
 use OCA\Screenings\Stream\StreamService;
 use OCP\AppFramework\Controller;
@@ -55,6 +56,7 @@ class PublicController extends Controller {
 		private MailService $mail,
 		private EventLogger $events,
 		private StreamService $stream,
+		private TrackingNotice $trackingNotice,
 		private IInitialState $initialState,
 		private IUserManager $userManager,
 		private IL10N $l,
@@ -201,6 +203,7 @@ class PublicController extends Controller {
 				'expiresAt' => $screening->getExpiresAt(),
 				'durationMs' => $screening->getDurationMs(),
 				'watermark' => (bool)$screening->getWatermark(),
+				'trackingNotice' => $this->trackingNotice->text($screening),
 			],
 			'viewer' => $invite === null ? null : [
 				'name' => $invite->getName(),

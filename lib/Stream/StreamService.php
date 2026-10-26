@@ -29,6 +29,8 @@ use OCP\IURLGenerator;
 class StreamService {
 	/** Direct MP4 responses carry at most this many bytes. */
 	public const MP4_CHUNK_BYTES = 2 * 1024 * 1024;
+	/** How far before the MP4 index a range may start and still count as reading it. */
+	public const INDEX_MARGIN_BYTES = 1024 * 1024;
 	public const HEARTBEAT_SECONDS = 5;
 
 	private ICache $cache;
@@ -133,8 +135,10 @@ class StreamService {
 		$end = min($end, $start + self::MP4_CHUNK_BYTES - 1);
 
 		$layout = $this->mp4Layout($file);
-		$inIndex = $start >= $layout['moovOffset'] && $start < $layout['moovOffset'] + $layout['moovSize'];
-		if (!$inIndex) {
+		$indexEnd = self::indexReadEnd($start, $end, $layout['moovOffset'], $layout['moovSize']);
+		if ($indexEnd !== null) {
+			$end = $indexEnd;
+		} else {
 			// Map the byte offset to an approximate time to apply the playhead
 			// window. Bitrates vary, so allow 50% slack on top of the window.
 			$bytesPerSecond = $layout['durationS'] > 0 ? $size / $layout['durationS'] : $size;
@@ -191,6 +195,28 @@ class StreamService {
 	 * @return array{int, int} inclusive start and end
 	 * @throws StreamDenied 416 for unsatisfiable or multiple ranges
 	 */
+	/**
+	 * Whether a range reads the MP4 index (moov), which the player needs
+	 * before it can play anything and so is always allowed. Browsers read in
+	 * aligned blocks: with the index at the end of a long film, Chrome asks
+	 * for a range that starts up to 64 KB before it. A range starting within
+	 * INDEX_MARGIN_BYTES before the index therefore counts too, and is cut off
+	 * where the index ends, so it can't be stretched into a download.
+	 *
+	 * @return ?int the (possibly shortened) last byte, or null if this isn't an index read
+	 */
+	public static function indexReadEnd(int $start, int $end, int $moovOffset, int $moovSize): ?int {
+		$moovEnd = $moovOffset + $moovSize - 1;
+		if ($moovSize <= 0 || $start > $moovEnd || $start < $moovOffset - self::INDEX_MARGIN_BYTES) {
+			return null;
+		}
+		if ($start < $moovOffset && $end < $moovOffset) {
+			// Entirely before the index: plain film data.
+			return null;
+		}
+		return min($end, $moovEnd);
+	}
+
 	public static function parseRange(?string $header, int $size): array {
 		if ($size <= 0) {
 			throw new StreamDenied('range', 416);

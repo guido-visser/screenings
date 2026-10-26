@@ -39,6 +39,12 @@ The original plan (8 phases) is in [PLAN.md](PLAN.md). Some details changed alon
 - **Heatmap** now follows OS light/dark switches live (the "default" theme changes no DOM attribute). Light theme checked for dashboard and settings.
 - Screenings 1 and 3 re-probed, so they have durations now.
 
+## After phase 8 (2026-10-26)
+
+- **Running in production** on Guido's own Nextcloud (NC 35, no ffmpeg). It's updated by building with `build/package.sh`, replacing the app folder and running `occ upgrade`. Access details are not kept in this repo.
+- **Fixed: Direct MP4 with the index at the end didn't play** for long films. Chrome reads the index from a 64 KB-aligned offset just before it, which the playhead window refused (`ahead`). `StreamService::indexReadEnd()` now allows a start up to 1 MB before the index and cuts the response off at its end. Short test files never showed this, because their end falls inside the window anyway.
+- **Tracking notice per screening** (`tracking_notice_enabled`, `tracking_notice`; `Service/TrackingNotice`). Default text "Your viewing behaviour is tracked."; null means the default. Used on the viewer page and in the invitation email.
+
 ## Open items
 
 1. **Browser testing not possible here:** Firefox, Safari (macOS), iPhone/iPad. The in-app browser is Chromium only. Points to watch: hls.js with ManagedMediaSource on iOS 17.1+, older iOS falling back to native HLS (which can't send the `X-Screening-Token` header, so it will fail), the SameSite=Strict cookie on Safari, and `sendBeacon` on page leave.
@@ -95,6 +101,7 @@ Admin login: see `dev/.env` (user `admin`). Mailpit: http://localhost:8025. The 
 | Multi HLS | 9 | 3-quality HLS, nl subtitle, watermark |
 | Long transcode | 15 | 2-min transcoded HLS, used for dashboard/leak tests |
 | Ten minutes MP4 | 16 | 600 s MP4 for byte-window tests |
+| Moov at end | 18 | 600 s MP4 with the index at the end (`/Films/moov-at-end.mp4`); invite token `vmo2oh1c9wcOeVrgKExWN2OJH2iC2QBl` |
 | others (4–8, 10–14) | | probe/transcode test cases incl. error states |
 
 | Invite (viewer link `/apps/screenings/s/<token>`) | screening | token |

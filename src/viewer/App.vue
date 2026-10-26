@@ -8,19 +8,19 @@
 		<section v-else-if="state === 'email'" class="viewer__card">
 			<ScreeningHeader :screening="screening" />
 			<EmailGate :token="token" />
-			<PrivacyNotice :owner="screening.owner" />
+			<PrivacyNotice v-if="screening.trackingNotice" :text="screening.trackingNotice" />
 		</section>
 
 		<section v-else-if="state === 'password'" class="viewer__card">
 			<ScreeningHeader :screening="screening" :viewer="viewer" />
 			<PasswordForm :token="token" />
-			<PrivacyNotice :owner="screening.owner" />
+			<PrivacyNotice v-if="screening.trackingNotice" :text="screening.trackingNotice" />
 		</section>
 
 		<section v-else-if="state === 'ready'" class="viewer__screening">
 			<ScreeningHeader :screening="screening" :viewer="viewer" wide />
 			<Player :playback="playback" :screening="screening" :viewer="viewer" />
-			<PrivacyNotice :owner="screening.owner" />
+			<PrivacyNotice v-if="screening.trackingNotice" :text="screening.trackingNotice" />
 		</section>
 	</main>
 </template>

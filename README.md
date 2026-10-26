@@ -74,6 +74,8 @@ Each screening has a **Dashboard** tab that shows:
 - **Viewer table:** live status, how much each person watched, how far they got, how often they opened the link, and their device and location.
 - **Unconfirmed visitors:** open-link visitors who asked for an email code but never entered it, with how many codes and wrong attempts.
 
+**Tracking notice:** by default viewers see "Your viewing behaviour is tracked." on the screening page and in the invitation email. Per screening you can change the text or turn the notice off (Settings → Playback and data). Whether you may track without telling viewers depends on your local privacy law.
+
 Click a viewer to see their sessions (device, screen, location, IP), a heatmap of how often they watched each part, and a filterable timeline of everything they did. Live data refreshes every 5 seconds.
 
 **Viewer location** is optional (*Administration settings → Screenings*). It uses a MaxMind GeoLite2/GeoIP2 City database on the server. Behind a reverse proxy, set Nextcloud's [`trusted_proxies`](https://docs.nextcloud.com/server/latest/admin_manual/configuration_server/reverse_proxy_configuration.html) correctly, or every viewer shows the proxy's address. The IP-bound playback tokens need it too.
@@ -85,7 +87,7 @@ Every media request (`/apps/screenings/stream/<session>/…`) must have:
 1. **The viewer session cookie**: HttpOnly and SameSite=Strict, set when the screening page opens. A new page load ends the invite's previous session, so one invite plays in one place at a time.
 2. **A live page**: the player sends a heartbeat every 5 s. Without one for 30 s, media is refused.
 3. **A playback token** (HLS) sent as the `X-Screening-Token` header. It lasts 60 s, is renewed by each heartbeat, and is bound to the session, IP address and User-Agent. Direct MP4 and subtitle URLs carry a signature bound to the session and User-Agent instead.
-4. **The playhead window**: nothing more than 90 s past the position the player last reported. On top of that, a speed budget of 3 minutes plus 3× real time per session (needs Redis).
+4. **The playhead window**: nothing more than 90 s past the position the player last reported. The exception is a Direct MP4's index (`moov`), which the player must read first: it may be read at any time, including a read that starts up to 1 MB before it, because browsers read in aligned blocks. That matters for exports with the index at the end, which is what most editors write. On top of that, a speed budget of 3 minutes plus 3× real time per session (needs Redis).
 
 Revoking an invite or reaching the expiry date stops playback within one heartbeat (about 5 s). HLS segments are AES-128 encrypted, and the key is served under the same rules.
 

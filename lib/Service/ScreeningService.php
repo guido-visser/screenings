@@ -85,6 +85,7 @@ class ScreeningService {
 		$screening->setMediaProgress(0);
 		$screening->setWatermark(false);
 		$screening->setOpenLinkEnabled(false);
+		$screening->setTrackingNoticeEnabled(true);
 		$screening->setOpenLinkToken($this->tokens->linkToken());
 		$screening->setRetentionDays(365);
 		$screening->setCreatedAt($now);
@@ -232,6 +233,19 @@ class ScreeningService {
 
 		if (array_key_exists('openLinkEnabled', $data)) {
 			$screening->setOpenLinkEnabled((bool)$data['openLinkEnabled']);
+		}
+
+		if (array_key_exists('trackingNoticeEnabled', $data)) {
+			$screening->setTrackingNoticeEnabled((bool)$data['trackingNoticeEnabled']);
+		}
+
+		if (array_key_exists('trackingNotice', $data)) {
+			// Empty means the default text.
+			$notice = trim((string)($data['trackingNotice'] ?? ''));
+			if (mb_strlen($notice) > TrackingNotice::MAX_LENGTH) {
+				throw new ValidationException('The tracking notice can be at most ' . TrackingNotice::MAX_LENGTH . ' characters', 'trackingNotice');
+			}
+			$screening->setTrackingNotice($notice === '' ? null : $notice);
 		}
 
 		if (array_key_exists('retentionDays', $data)) {

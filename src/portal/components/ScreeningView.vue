@@ -115,6 +115,15 @@
 					<NcCheckboxRadioSwitch v-model="form.watermark" type="switch">
 						{{ t('screenings', 'Show the viewer\'s name and email as a watermark') }}
 					</NcCheckboxRadioSwitch>
+					<NcCheckboxRadioSwitch v-model="form.trackingNoticeEnabled" type="switch">
+						{{ t('screenings', 'Tell viewers that their viewing is tracked') }}
+					</NcCheckboxRadioSwitch>
+					<NcTextArea v-if="form.trackingNoticeEnabled"
+						v-model="form.trackingNotice"
+						:label="t('screenings', 'Tracking notice')"
+						:helper-text="t('screenings', 'Shown on the screening page and in invitation emails. Empty it to go back to the default text.')"
+						maxlength="500"
+						resize="vertical" />
 					<NcTextField v-model="form.retentionDays"
 						type="number"
 						min="1"
@@ -244,6 +253,9 @@ async function reprocess() {
 	}
 }
 
+// Keep in sync with TrackingNotice::text() on the server.
+const defaultTrackingNotice = t('screenings', 'Your viewing behaviour is tracked.')
+
 function toForm(s) {
 	return {
 		title: s.title,
@@ -254,6 +266,8 @@ function toForm(s) {
 		expiresAt: s.expiresAt ? new Date(s.expiresAt * 1000) : null,
 		openLinkEnabled: s.openLinkEnabled,
 		watermark: s.watermark,
+		trackingNoticeEnabled: s.trackingNoticeEnabled,
+		trackingNotice: s.trackingNotice ?? defaultTrackingNotice,
 		retentionDays: String(s.retentionDays),
 	}
 }
@@ -278,6 +292,10 @@ const changes = computed(() => {
 	if (expiresAt !== s.expiresAt) out.expiresAt = expiresAt
 	if (f.openLinkEnabled !== s.openLinkEnabled) out.openLinkEnabled = f.openLinkEnabled
 	if (f.watermark !== s.watermark) out.watermark = f.watermark
+	if (f.trackingNoticeEnabled !== s.trackingNoticeEnabled) out.trackingNoticeEnabled = f.trackingNoticeEnabled
+	// The default text (or an emptied field) is stored as "no custom text", so it stays translated.
+	const notice = f.trackingNotice.trim() === defaultTrackingNotice ? '' : f.trackingNotice.trim()
+	if (notice !== (s.trackingNotice ?? '')) out.trackingNotice = notice
 	if (Number(f.retentionDays) !== s.retentionDays) out.retentionDays = Number(f.retentionDays)
 	return out
 })

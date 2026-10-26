@@ -104,4 +104,23 @@ class StreamSecurityTest extends TestCase {
 			}
 		}
 	}
+
+	public function testIndexReadAtTheEndOfTheFile(): void {
+		// The case seen in Chrome: moov at 50225942 (384809 bytes), read from
+		// the 64 KB boundary before it.
+		$moov = 50225942;
+		$size = 384809;
+		$this->assertSame($moov + $size - 1, StreamService::indexReadEnd(50200576, 50200576 + StreamService::MP4_CHUNK_BYTES - 1, $moov, $size), 'aligned read just before the index');
+		$this->assertSame($moov + 999, StreamService::indexReadEnd($moov, $moov + 999, $moov, $size), 'inside the index, short range kept');
+		$this->assertSame($moov + $size - 1, StreamService::indexReadEnd($moov - StreamService::INDEX_MARGIN_BYTES, $moov + 5_000_000, $moov, $size), 'cut off where the index ends');
+	}
+
+	public function testFilmDataIsNotAnIndexRead(): void {
+		$moov = 50225942;
+		$size = 384809;
+		$this->assertNull(StreamService::indexReadEnd($moov - StreamService::INDEX_MARGIN_BYTES - 1, $moov + 10, $moov, $size), 'starts too far before the index');
+		$this->assertNull(StreamService::indexReadEnd($moov - 1000, $moov - 1, $moov, $size), 'ends before the index');
+		$this->assertNull(StreamService::indexReadEnd($moov + $size, $moov + $size + 10, $moov, $size), 'after the index');
+		$this->assertNull(StreamService::indexReadEnd(1000, 2000, $moov, 0), 'no index known');
+	}
 }

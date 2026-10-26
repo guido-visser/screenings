@@ -27,6 +27,7 @@ class MailService {
 		private IUserManager $userManager,
 		private IURLGenerator $urlGenerator,
 		private IL10N $l,
+		private TrackingNotice $trackingNotice,
 		private LoggerInterface $logger,
 	) {
 	}
@@ -65,7 +66,12 @@ class MailService {
 			$template->addBodyText($this->l->t('The link works until %s.', [$this->l->l('datetime', $screening->getExpiresAt())]));
 		}
 		$template->addBodyButton($this->l->t('Watch the screening'), $link);
-		$template->addBodyText($this->l->t('This link is personal; please do not forward it. Your viewing is recorded for %s.', [$owner]));
+		$template->addBodyText($this->l->t('This link is personal; please do not forward it.'));
+		// Same notice as on the screening page, so the mail never promises less tracking than there is.
+		$notice = $this->trackingNotice->text($screening);
+		if ($notice !== null) {
+			$template->addBodyText($notice);
+		}
 		$template->addFooter();
 
 		$this->send($screening, $invite->getEmail(), $invite->getName(), $template);

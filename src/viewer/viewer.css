@@ -409,6 +409,7 @@ body#body-public #content.app-public {
 }
 
 .privacy-notice {
+	white-space: pre-line;
 	margin: 24px 0 0;
 	color: var(--scr-muted);
 	font-size: 0.8em;

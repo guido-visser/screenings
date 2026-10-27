@@ -18,8 +18,9 @@ open_page() {
 open_page
 SIZE=$(curl -s -D - -o /dev/null -b "$JAR" -A "$UA" -H 'Range: bytes=0-1' "$BASE$SRC" | tr -d '\r' | awk -F/ '/^Content-Range/ {print $2}')
 BPS=$((SIZE / 600))
+# Ask for 2 MB; the server cuts each answer to at most ~20 s of film.
 CHUNK=$((2 * 1024 * 1024))
-echo "size $SIZE bytes, ~$BPS bytes/s, chunk ~$((CHUNK / BPS)) s"
+echo "size $SIZE bytes, ~$BPS bytes/s"
 
 offset=$((SIZE / 2))   # past the moov index at the start: counted against the budget
 fetched=0
@@ -29,12 +30,12 @@ for reload in 0 1 2 3; do
   while :; do
     pos=$((offset / BPS))
     curl -s -o /dev/null -b "$JAR" -A "$UA" -H 'Content-Type: application/json' -d "{\"position\": $pos, \"playing\": true}" "$BASE/apps/screenings/stream/$SID/heartbeat"
-    status=$(curl -s -o /dev/null -w '%{http_code}' -b "$JAR" -A "$UA" -H "Range: bytes=$offset-$((offset + CHUNK - 1))" "$BASE$SRC")
+    read -r status got < <(curl -s -o /dev/null -w '%{http_code} %{size_download}' -b "$JAR" -A "$UA" -H "Range: bytes=$offset-$((offset + CHUNK - 1))" "$BASE$SRC")
     if [ "$status" != 206 ]; then
       echo "  refused with $status at ~${pos}s"
       break
     fi
-    offset=$((offset + CHUNK)); fetched=$((fetched + CHUNK))
+    offset=$((offset + got)); fetched=$((fetched + got))
     [ "$offset" -ge "$SIZE" ] && { echo "  reached the end"; break 2; }
   done
 done

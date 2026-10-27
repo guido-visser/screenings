@@ -116,6 +116,21 @@ class StreamSecurityTest extends TestCase {
 		return new PlaybackBudget($factory);
 	}
 
+	public function testMp4ChunksStayWithinTheBudgetAtLowBitrates(): void {
+		// A normal screener (8 Mbit/s): the plain 2 MB cap.
+		$this->assertSame(StreamService::MP4_CHUNK_BYTES, StreamService::mp4ChunkBytes(1_000_000));
+		// 160 kbit/s: 20 s of film (400 KB), not 105 s.
+		$this->assertSame(400_000, StreamService::mp4ChunkBytes(20_000));
+		// Near-silent bitrates: the floor.
+		$this->assertSame(StreamService::MP4_MIN_CHUNK_BYTES, StreamService::mp4ChunkBytes(100));
+		// Three chunks always fit the burst budget from ~9 kbit/s up (below
+		// that the floor takes over; no real film is that small).
+		foreach ([1_100, 2_000, 20_000, 100_000, 1_000_000] as $bytesPerSecond) {
+			$seconds = StreamService::mp4ChunkBytes($bytesPerSecond) / $bytesPerSecond;
+			$this->assertLessThanOrEqual(PlaybackBudget::BURST_SECONDS / 3, $seconds, "at $bytesPerSecond B/s");
+		}
+	}
+
 	public function testParseRange(): void {
 		$this->assertSame([0, 999], StreamService::parseRange(null, 1000));
 		$this->assertSame([0, 999], StreamService::parseRange('bytes=0-', 1000));

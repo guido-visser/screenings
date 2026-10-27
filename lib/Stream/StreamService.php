@@ -32,6 +32,9 @@ class StreamService {
 	public const MP4_CHUNK_BYTES = 2 * 1024 * 1024;
 	/** How far before the MP4 index a range may start and still count as reading it. */
 	public const INDEX_MARGIN_BYTES = 1024 * 1024;
+	/** A viewer's MP4 chunk never holds more film than this (see mp4ChunkBytes). */
+	public const MP4_CHUNK_SECONDS = 20;
+	public const MP4_MIN_CHUNK_BYTES = 64 * 1024;
 	public const HEARTBEAT_SECONDS = 5;
 
 	private ICache $cache;
@@ -179,7 +182,7 @@ class StreamService {
 	}
 
 	/**
-	 * A byte range of a Direct MP4, at most MP4_CHUNK_BYTES long.
+	 * A byte range of a Direct MP4, at most one chunk long (mp4ChunkBytes).
 	 *
 	 * @throws StreamDenied
 	 */
@@ -217,6 +220,7 @@ class StreamService {
 			// Map the byte offset to an approximate time to apply the playhead
 			// window. Bitrates vary, so allow 50% slack on top of the window.
 			$bytesPerSecond = $layout['durationS'] > 0 ? $size / $layout['durationS'] : $size;
+			$end = min($end, $start + self::mp4ChunkBytes($bytesPerSecond) - 1);
 			$approxTime = $start / $bytesPerSecond / 1.5;
 			if (!PlaybackBudget::withinWindow($approxTime, $ctx->session->getLastPositionS())) {
 				throw new StreamDenied(StreamDenied::AHEAD);
@@ -299,6 +303,18 @@ class StreamService {
 			return null;
 		}
 		return min($end, $moovEnd);
+	}
+
+	/**
+	 * How many bytes of film data one viewer request may get. Each chunk is
+	 * charged to the playback budget by its duration, so a fixed size alone
+	 * fails for low-bitrate films: at 160 kbit/s a 2 MB chunk is 105 s of
+	 * film, and two of them overspend the 180 s budget. Capping by duration
+	 * as well keeps every chunk at most MP4_CHUNK_SECONDS of budget (above
+	 * the floor, which only matters for near-silent bitrates).
+	 */
+	public static function mp4ChunkBytes(float $bytesPerSecond): int {
+		return (int)max(self::MP4_MIN_CHUNK_BYTES, min(self::MP4_CHUNK_BYTES, floor($bytesPerSecond * self::MP4_CHUNK_SECONDS)));
 	}
 
 	public static function parseRange(?string $header, int $size): array {

@@ -110,7 +110,7 @@ D="/c/Program Files/Docker/Docker/resources/bin/docker.exe"
 ## Ready-made test scripts (`scripts/`)
 
 - **`leaktest.sh <invite-token>`:** acts as a viewer with curl (cookie jar) and tries the misuse cases (no token, no cookie, other UA, scripted segment download, faked heartbeat). Expected: 403s, `ahead` at about 92 s. Its last output line prints the cookie, token, session ID and UA, for an ffmpeg test inside the container.
-- **`budget-reload.sh <invite-token>`** (repo root): scripted Direct MP4 download with faked heartbeats that reloads the page on every refusal. Use a 600 s MP4 invite (`T8i1f…`, screening 16). Expected: about 180 s of media, then 429 in every new session. The bucket refills in 60 s, so wait a minute before playing that invite in the browser.
+- **`budget-reload.sh <invite-token>`** (repo root): scripted Direct MP4 download with faked heartbeats that reloads the page on every refusal. Use a 600 s MP4 invite (`T8i1f…`, screening 16). Expected: about 180 s of media (plus 3× the seconds the run took), then 429 in every new session. Since 0.4.3 the server cuts each answer to at most 20 s of film; the script counts what it actually receives. The bucket refills in 60 s, so wait a minute before playing that invite in the browser.
 - **`verify-hls.sh <screeningId> <mediaToken>`** (run inside the container after `compose cp` to `/tmp`): checks that segments are unreadable without the key and that every variant decodes with it.
 - **`geoip-check.php`** (inside the container): GeoIpService status and lookups against MaxMind's test database.
 - **`nc-errors.py`:** filters `nextcloud.log` down to real errors. "Cannot write into apps directory" after `occ upgrade` and "Backends provided no user object" are dev noise.
@@ -121,7 +121,7 @@ D="/c/Program Files/Docker/Docker/resources/bin/docker.exe"
   - Basic auth on page loads works for the portal only with `OCS-APIREQUEST: true` on every request; without it the page's own API calls get 401.
   - Opening viewer links records real sessions; `screenshots.py` shoots the viewer pages first and then deletes the headless sessions, events, ranges and page opens.
   - Each invite has a playback budget: loading the same viewer link many times in a row gets 429s and "Playback stopped". Wait a minute between runs on one invite.
-  - A very low-bitrate MP4 (plain gradients, ~160 kbit/s) runs into the budget after one jump (see HANDOFF open item); the demo film is padded to 2.5 Mbit/s. Film grain at a fixed quality instead makes files of many GB.
+  - Before 0.4.3 a very low-bitrate MP4 (plain gradients, ~160 kbit/s) ran into the budget after one jump. The demo film is padded to 2.5 Mbit/s anyway, like a real screener; film grain at a fixed quality instead makes files of many GB.
 - **Test fixtures in the dev admin's Files:** `/Films/auto-tests/` (safe.mp4, h264.mkv, pcm.mov, prores.mov, tenbit.mp4, dnxhr.mxf; Auto screenings 19–25), `ten-minutes.*.srt` next to `ten-minutes.mp4` (incl. a trailer and a broken file), `moov-at-end.mp4` (screening 18).
 - **`build/package.sh`** (repo root, not in `scripts/`): builds the release tarball. To check a package, run the dev image standalone with SQLite (`docker run -d --name scr-pkgtest -e SQLITE_DATABASE=nc -e NEXTCLOUD_ADMIN_USER=admin -e NEXTCLOUD_ADMIN_PASSWORD=… -e NEXTCLOUD_TRUSTED_DOMAINS=localhost -p 8090:80 screenings-dev-nextcloud`), extract the tarball into its `custom_apps/`, `occ app:enable screenings`, then remove the container.
 

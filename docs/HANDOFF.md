@@ -1,6 +1,6 @@
 # Handoff: Screenings (Nextcloud app)
 
-**State on 2026-10-26:** version **0.4.2** in `main` (the feedback feature: viewer notes, the owner's review page, closing questions, and live updates of both), **deployed** to Guido's Nextcloud on 2026-10-26 (checked: all new routes 200, owner preview of Bloedtranen streams, Feedback tab loads). `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
+**State on 2026-10-27:** version **0.4.3** in `main` (the feedback feature: viewer notes, the owner's review page, closing questions, live updates; plus a fix for low-bitrate Direct MP4s), deployed to Guido's Nextcloud. `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
 
 **Start here:** read the project skill `.claude/skills/screenings-dev/SKILL.md` before building, testing or deploying. It has the commands, the deploy script, the production quirks and the Windows/Docker pitfalls that cost a lot of time when rediscovered. User-facing behaviour is documented in the [README](../README.md); the original 8-phase plan is in [PLAN.md](PLAN.md) (done, partly superseded).
 
@@ -19,7 +19,6 @@ A Nextcloud app for sending tracked private screenings of a film.
 ## Open items, in order
 
 0. **Feedback feature: done** (all three phases, 2026-10-26). Small leftovers: the Feedback tab has no count badge (the dashboard tiles show the counts), and notifications stay after their invite is deleted (their links still open the tab). Not tested here: real fullscreen with the note card or the questions dialog, and deleting a whole screening with questions (same cleanup code path as notes).
-0b. **Bug: low-bitrate Direct MP4s stall** (found 2026-10-26 while making README screenshots). `StreamService::mp4Content` serves at most `MP4_CHUNK_BYTES` (2 MB) per range and charges the playback budget (180 s, refills at 3×) the chunk's duration in film seconds. At ~160 kbit/s a chunk is ~105 s of film, so starting plus one jump exceeds the budget; Chrome treats the 429 as fatal, the player retries three times and stops ("Playback stopped"). Below ~90 kbit/s a single chunk exceeds the whole budget and nothing plays. Normal screeners (2+ Mbit/s) are unaffected (a chunk is a few seconds). Fix idea: cap a chunk at a duration too, e.g. `min(MP4_CHUNK_BYTES, bytesPerSecond * 20 s)` with a small floor, so a chunk never costs more than ~20 s of budget; add a unit test for the chunk size.
 1. **Guido still has to confirm on his server** (none of these can be fully tested from here):
    - **Fullscreen controls** on Chrome 156/Windows (2560×1440). He reported them missing; they work in headless Chrome (`scripts/fullscreen-check.py`). Hardening shipped in 0.3.6: controls show on entering, stay while hovered, wake on any pointer. If still broken, ask whether moving the mouse brings them back.
    - **A real conversion** (e.g. ProRes or MKV) with the server's ffmpeg 4.2. That version supports every option the app uses (checked), but no full conversion has run there yet.
@@ -71,6 +70,7 @@ tests/Unit/                      104 tests: feedback (note text, position, open-
 - **Encryption:** every HLS segment is encrypted by `HlsPackager` with IV = media sequence. ffmpeg's own HLS encryption isn't used (it reuses one IV).
 - **Sessions:** one cookie per invite (`scr_sess_<inviteId>`, SameSite=Strict); a second tab replaces the first. `ended_at` only means "replaced"; "live" is a heartbeat under 20 s old. The "password entered" cookie is SameSite=Lax so it survives clicks from mail apps. The resume point is the `last_position_s` of the invite's most recently active session past 10 s (`SessionService::resumePosition`, read before the new session starts); a new session sitting at 0:00 under the dialog doesn't overwrite it.
 - **Tokens:** HLS requests carry a 60 s token (header, bound to IP + UA); MP4 and VTT URLs carry a session+UA signature (`?sig=`), because the browser fetches them itself.
+- **Direct MP4 chunks:** a viewer's range is cut to `StreamService::mp4ChunkBytes()`: 2 MB, but never more than 20 s of film (floor 64 KB). The budget charges chunks by duration, so a fixed 2 MB stalled low-bitrate films (at 160 kbit/s one chunk was 105 s; start plus one jump overspent the 180 s budget, and a refused range is fatal for `<video>`). Index reads and the owner's preview keep 2 MB.
 - **Direct MP4 index:** reads of the `moov` box are always allowed, including a start up to 1 MB before it (Chrome reads 64 KB-aligned). Without this, long films with the index at the end never start.
 - **Far seeks in Direct MP4:** the player reports the target in a heartbeat *before* moving (seeks over 60 s), and reloads the source if a range is refused anyway. A plain `<video>` never retries a refused range.
 - **Auto:** the decision is stored in `media_mode` (`direct` / `remux` / `audio` / `full`); streaming code uses `Screening::servedAs()`, never the raw delivery mode. Without conversion enabled, Auto still plays browser-ready files and explains the rest.
@@ -120,7 +120,9 @@ Still open from that review (low risk on a server with few trusted accounts):
 | 03d6f89 | 0.4.0: viewer notes (feedback phase 1): per-invite switch, note box in the player (N), markers, "My notes" list, notes in the owner's viewer timeline |
 | 5440f09 | Feedback phase 2: Notes tab with the owner's preview player, colour-coded markers, note card, following list, CSV/SRT export, dashboard tile, bundled notifications |
 | 5b8d3ac | 0.4.1: feedback phase 3: closing questions (editor, per-invite switch, dialog at the end and "Give feedback", reminder, Feedback → Answers with summaries and CSV, notification) |
-| d7ebe1a | 0.4.2 (deployed): live Feedback pages: new/edited/deleted notes and answers appear within 5 s, live viewers on the review timeline |
+| d7ebe1a | 0.4.2: live Feedback pages: new/edited/deleted notes and answers appear within 5 s, live viewers on the review timeline |
+| a195fae | README rewritten for users, with screenshots of a demo screening; demo-data.py and screenshots.py |
+| (this commit) | 0.4.3: MP4 chunks capped at 20 s of film, so low-bitrate films no longer stall on the playback budget; budget-reload.sh counts what it actually receives |
 
 ## Production (details outside the repo)
 

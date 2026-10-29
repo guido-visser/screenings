@@ -7,6 +7,25 @@ description: Working on the Screenings Nextcloud app in this repo - running the 
 
 Project state and next steps: `docs/HANDOFF.md`. Read that first in a new chat.
 
+## Working efficiently (fewer tokens, fewer retries)
+
+What cost the most in earlier sessions, and how to avoid it:
+
+- **Start of a session: is Docker up?** Docker Desktop stops on its own between sessions (twice in one session on 2026-10-27/29). Run `"$D" info >/dev/null 2>&1 || { start Docker Desktop; poll docker info; "$D" compose -f dev/docker-compose.yml up -d; }` before the first docker command, instead of finding out from a failed lint or test.
+- **Read narrowly.** `grep -n` to find, then `sed -n 'a,bp'` for the lines you need; `docs/HANDOFF.md` has the architecture map, so don't read whole files to find where something lives. Don't re-read a file after editing it.
+- **Batch edits per change,** as one Python script per group of files that asserts each anchor occurs exactly once (`assert s.count(a) == 1`) and writes only when all anchors match, so a wrong anchor changes nothing.
+- **The quoting trap in those scripts** (on top of the backslash rule below): a raw triple-quoted string can't end with its own quote character or a backslash. An anchor like `r"""…class="x\""""` or one ending in `'vue'` inside `r'''…'''` breaks the script. Pick anchors that end in another character (`>`, `,`, a newline), or make that one edit with the Edit tool.
+- **Check pages with JS, not screenshots.** A `javascript_tool` probe that returns a small JSON object (state, texts, counts, `currentTime`) costs a fraction of a screenshot. Take a screenshot only to judge the look, at `scale: 0.6`, once per finished view. Screenshots right after an action can be stale; trust the JS probe.
+- **Lint, migrate and test in one command** (lint loop, `occ upgrade`, `phpunit`), and wait for the frontend build with the `grep -l "<new string>" js/*.mjs` loop in the same call.
+- **Logins expire.** A Docker restart drops the dev sessions (Redis), and the production session in the browser pane expires too. Never type a password into a login form:
+  - **Local portal checks:** use headless Chrome with `Authorization: Basic …` plus `OCS-APIREQUEST: true` (see `scripts/screenshots.py`; its `WS`/`js` helpers can be reused for one-off checks, as the dev admin from `dev/.env` or the demo account).
+  - **Production:** if the pane shows the login page, skip the browser check and say so; the deploy script's own checks still count.
+- **Public POSTs from curl** (`/s/<token>/password`, `/s/<token>/code`) fail with "CSRF check failed": they need the page's request token and Nextcloud session together. Test them in the browser pane, where the page sends them.
+- **Parse script output as JSON,** not with `awk` columns: names contain spaces ("Visitor 7", "Anna de Vries").
+- **The playback budget is per invite.** Repeated scripted loads of the same viewer link soon get 429 and "Playback stopped". That's the protection working, not a bug: wait 60–90 s or use another invite.
+- **`nextcloud.log` times are UTC** (the host is UTC+1/+2), so pass UTC times to `nc-errors.py`. The container's `date` is UTC too.
+- **Deleting with `sh -c '… rm …'` is blocked** by Claude Code's safety check, and the command doesn't run at all. Don't put `rm` inside `sh -c`. Write temporary files to the container's `/tmp` under a fixed name and overwrite them next time. If something must go, say what and let Guido remove it.
+
 ## Shell basics (Windows host, Git Bash)
 
 - **Docker in Bash:** `docker` is not on the Bash PATH. Always use
@@ -90,12 +109,16 @@ D="/c/Program Files/Docker/Docker/resources/bin/docker.exe"
 - **Remote IP:** the dev Nextcloud sees every request from `172.18.0.1`, because the host comes through the Docker gateway. To test GeoIP or IP-bound logic, temporarily run `occ config:system:set trusted_proxies 0 --value=172.18.0.0/16`, send `X-Forwarded-For`, then delete the setting.
 - **Brute-force protection in NC 35 doesn't sleep.** It counts attempts and answers 429 once an IP passes 10 misses in 30 minutes, for every route of that action (valid links too). Testing it blocks your own host: reset with `occ security:bruteforce:reset 172.18.0.1`. Inspect with `occ security:bruteforce:attempts 172.18.0.1 <action>`.
 - **Owner API from curl:** basic auth with the admin credentials from `dev/.env` plus the header `OCS-APIREQUEST: true` passes the CSRF check, so `curl -u "$NC_ADMIN_USER:$NC_ADMIN_PASSWORD" -H 'OCS-APIREQUEST: true' …/apps/screenings/api/…` works. Source `dev/.env` with `set -a; . dev/.env; set +a`.
+- **Anonymous viewers from curl:** a separate cookie jar per "browser" (`-c jar -b jar`). For the public link, a new jar is a new visitor, and at most 20 new visitors per IP per hour are allowed; after that every new jar gets the "busy" page (429) for the rest of that hour. Plan tests around that budget (it's per hour, in Redis).
 - **Second accounts for IDOR tests:** `occ user:add --password-from-env` with `-e OC_PASS=…` on `compose exec`. Deleting such users afterwards leaves harmless "Backends provided no user object" errors from core's metadata job in the log.
 - **Background jobs on demand:** `occ background-job:list --class '<FQCN>'` shows the id, `occ background-job:execute --force-execute <id>` runs it now.
 - **Direct MP4 duration:** `occ screenings:process-media` skips Direct MP4. To re-probe one, use `POST /api/screenings/<id>/media/reprocess` ("Process again").
 - **Light theme:** the admin account uses Nextcloud's "default" theme, which follows the OS. Test light/dark with the browser pane's `resize_window` `colorScheme`, not by changing the user's theming setting.
 - **File events** (`NodeCreated/Written/Renamed/CopiedEvent`) fire for WebDAV and web uploads, not for files written straight to disk plus `files:scan`. Test listeners with curl WebDAV (`PUT -T -`, `MOVE`/`COPY` with a `Destination:` header) as in `scripts/subtitle-events-test.sh`. The app's own app-data files fire these events too, so filter on `/<user>/files/` paths.
 - **Making test videos:** `ffmpeg -nostdin` (without it, ffmpeg waits for input) from `/Films/test-clip.mp4`; MXF needs `-ar 48000`. Then `occ files:scan --path=/admin/files/Films`. Nextcloud has no MIME type for `.mxf` (it's `application/octet-stream`).
+  - **Synthetic films** (`-f lavfi -i gradients=…`) compress to almost nothing. Use a constant bitrate (`-b:v 2500k -minrate 2500k -maxrate 2500k -bufsize 5000k -x264-params nal-hrd=cbr`) for realistic files. Noise/grain at a fixed CRF produced 2–4 GB for ten minutes.
+  - **A 10-second test encode first** (`d=10`) shows size and bitrate before committing minutes to the full one.
+  - **Test films for special cases:** `/Films/demo/night-ferry.mp4` (admin, ~160 kbit/s) for low-bitrate playback, used by "Low bitrate test" (screening 35).
 
 ## Browser checks (in-app browser pane)
 

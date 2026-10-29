@@ -1,6 +1,6 @@
 # Handoff: Screenings (Nextcloud app)
 
-**State on 2026-10-29:** version **0.5.0** in `main`: public screenings (a link without name or email; anonymous visitors, fully tracked). **Not deployed**: production runs 0.4.3 (feedback feature and the low-bitrate fix). `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
+**State on 2026-10-29:** version **0.5.0** in `main`: public screenings (a link without name or email; anonymous visitors, fully tracked), **deployed** to Guido's Nextcloud on 2026-10-29 (deploy checks passed; no public link switched on there yet). `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
 
 **Start here:** read the project skill `.claude/skills/screenings-dev/SKILL.md` before building, testing or deploying. It has the commands, the deploy script, the production quirks and the Windows/Docker pitfalls that cost a lot of time when rediscovered. User-facing behaviour is documented in the [README](../README.md); the original 8-phase plan is in [PLAN.md](PLAN.md) (done, partly superseded).
 
@@ -125,7 +125,7 @@ Still open from that review (low risk on a server with few trusted accounts):
 | d7ebe1a | 0.4.2: live Feedback pages: new/edited/deleted notes and answers appear within 5 s, live viewers on the review timeline |
 | a195fae | README rewritten for users, with screenshots of a demo screening; demo-data.py and screenshots.py |
 | 9ced955 | 0.4.3 (deployed): MP4 chunks capped at 20 s of film, so low-bitrate films no longer stall on the playback budget; budget-reload.sh counts what it actually receives |
-| (this commit) | 0.5.0: public screenings: a link without name or email, anonymous numbered visitors with full tracking, public views/visitors on the dashboard, block per visitor, new-visitor limit per IP |
+| ff21228 | 0.5.0 (deployed): public screenings: a link without name or email, anonymous numbered visitors with full tracking, public views/visitors on the dashboard, block per visitor, new-visitor limit per IP |
 
 ## Production (details outside the repo)
 

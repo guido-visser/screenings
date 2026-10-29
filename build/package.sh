@@ -12,6 +12,15 @@
 # templates, img, the built js/ (without source maps) and
 # vendor/maxmind-db/reader, which Application::registerVendorAutoloader()
 # loads directly. vendor/autoload.php is never used, so it isn't shipped.
+#
+# Signing for the Nextcloud App Store happens when the app's private key and
+# certificate exist (see docs/app-store.md):
+#   SCREENINGS_SIGN_KEY   default ~/.nextcloud/certificates/screenings.key
+#   SCREENINGS_SIGN_CERT  default ~/.nextcloud/certificates/screenings.crt
+# The app is signed with "occ integrity:sign-app" in the running dev stack
+# (appinfo/signature.json), then the tarball with openssl, which writes
+# build/screenings-<version>.tar.gz.sig: the signature the App Store asks
+# for with each release. Without a key the package is built unsigned.
 set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -19,6 +28,8 @@ VERSION=$(sed -n 's:.*<version>\(.*\)</version>.*:\1:p' "$ROOT/appinfo/info.xml"
 WORK="$ROOT/build/work"
 STAGE="$WORK/screenings"
 OUT="$ROOT/build/screenings-$VERSION.tar.gz"
+SIGN_KEY=${SCREENINGS_SIGN_KEY:-$HOME/.nextcloud/certificates/screenings.key}
+SIGN_CERT=${SCREENINGS_SIGN_CERT:-$HOME/.nextcloud/certificates/screenings.crt}
 
 DOCKER=${DOCKER:-docker}
 if ! command -v "$DOCKER" >/dev/null 2>&1 && [ -x "/c/Program Files/Docker/Docker/resources/bin/docker.exe" ]; then
@@ -36,6 +47,29 @@ run_in() {
 		host=$(cd "$STAGE" && (pwd -W 2>/dev/null || pwd))
 		MSYS_NO_PATHCONV=1 "$DOCKER" run --rm -v "$host:/app" -w /app "$image" "$@"
 	fi
+}
+
+# Signs $STAGE with "occ integrity:sign-app" in the dev stack's Nextcloud.
+# The key goes in on stdin, lives in the container's /tmp only for the
+# signing, and is removed again; only appinfo/signature.json comes back.
+sign_app() {
+	# Git Bash: a /c/... path would reach Docker as C:\c\...; pass a Windows path.
+	compose="$(cd "$ROOT/dev" && (pwd -W 2>/dev/null || pwd))/docker-compose.yml"
+	if ! MSYS_NO_PATHCONV=1 "$DOCKER" compose -f "$compose" exec -T -u www-data nextcloud true </dev/null 2>/dev/null; then
+		echo "Signing needs the dev stack running (cd dev && docker compose up -d)" >&2
+		exit 1
+	fi
+	dir=/tmp/screenings-sign-$$
+	(cd "$WORK" && tar -cf - screenings) | MSYS_NO_PATHCONV=1 "$DOCKER" compose -f "$compose" exec -T -u www-data nextcloud sh -c "mkdir -p $dir && tar -xf - -C $dir"
+	MSYS_NO_PATHCONV=1 "$DOCKER" compose -f "$compose" exec -T -u www-data nextcloud sh -c "umask 077 && cat > $dir/key.pem" <"$SIGN_KEY"
+	MSYS_NO_PATHCONV=1 "$DOCKER" compose -f "$compose" exec -T -u www-data nextcloud sh -c "cat > $dir/cert.pem" <"$SIGN_CERT"
+	status=0
+	MSYS_NO_PATHCONV=1 "$DOCKER" compose -f "$compose" exec -T -u www-data nextcloud \
+		php /var/www/html/occ integrity:sign-app --path="$dir/screenings" --privateKey="$dir/key.pem" --certificate="$dir/cert.pem" </dev/null || status=$?
+	[ "$status" -ne 0 ] || MSYS_NO_PATHCONV=1 "$DOCKER" compose -f "$compose" exec -T -u www-data nextcloud cat "$dir/screenings/appinfo/signature.json" </dev/null >"$STAGE/appinfo/signature.json"
+	MSYS_NO_PATHCONV=1 "$DOCKER" compose -f "$compose" exec -T -u www-data nextcloud rm -rf "$dir" </dev/null
+	[ "$status" -eq 0 ] || { echo "Signing the app failed" >&2; exit 1; }
+	[ -s "$STAGE/appinfo/signature.json" ] || { echo "No signature.json came back" >&2; exit 1; }
 }
 
 # Docker named volumes for the frontend build (see build_frontend).
@@ -91,7 +125,7 @@ build_frontend() {
 echo "Packaging screenings $VERSION"
 # deploy.sh reuses a package whose stamp names the current clean commit; a
 # package built here may contain uncommitted changes, so drop the stamp.
-rm -f "$OUT.commit"
+rm -f "$OUT.commit" "$OUT.sig"
 rm -rf "$WORK"
 mkdir -p "$STAGE"
 (cd "$ROOT" && git ls-files -z --cached --others --exclude-standard | xargs -0 tar -cf - --) | tar -xf - -C "$STAGE"
@@ -113,7 +147,19 @@ find "$STAGE" -name '*.map' -type f -delete
 [ -f "$STAGE/vendor/maxmind-db/reader/src/MaxMind/Db/Reader.php" ] || { echo "MaxMind reader missing" >&2; exit 1; }
 ls "$STAGE"/js/screenings-*.mjs >/dev/null || { echo "Frontend build missing" >&2; exit 1; }
 
+SIGNED=no
+if [ -f "$SIGN_KEY" ] && [ -f "$SIGN_CERT" ]; then
+	echo "Signing with $SIGN_CERT"
+	sign_app
+	SIGNED=yes
+fi
+
 tar -czf "$OUT" -C "$WORK" screenings
 rm -rf "$WORK"
 echo "Wrote $OUT"
-echo "For the app store, sign it with: occ integrity:sign-app --path=<extracted>/screenings --privateKey=... --certificate=..."
+if [ "$SIGNED" = yes ]; then
+	openssl dgst -sha512 -sign "$SIGN_KEY" "$OUT" | openssl base64 -A >"$OUT.sig"
+	echo "Wrote $OUT.sig (the signature to paste into the App Store release form)"
+else
+	echo "Unsigned: no key at $SIGN_KEY (see docs/app-store.md to publish in the App Store)"
+fi

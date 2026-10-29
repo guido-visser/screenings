@@ -9,3 +9,7 @@
 /dev/deploy.env
 /build/package.log
 /build/*.commit
+/build/*.sig
+# App Store signing keys never go into the repository
+*.key
+*.csr

@@ -3,14 +3,42 @@
       xsi:noNamespaceSchemaLocation="https://apps.nextcloud.com/schema/apps/info.xsd">
 	<id>screenings</id>
 	<name>Screenings</name>
-	<summary>Share private, tracked film screenings</summary>
-	<description><![CDATA[Send confidential screening links for a film and see exactly how each viewer watched it: opens, playback progress, pauses, seeks, subtitles and more.]]></description>
+	<summary>Private, tracked film screenings with viewer feedback</summary>
+	<description><![CDATA[**Private, tracked film screenings from your own Nextcloud.**
+
+For filmmakers who send cuts to people they trust: an editor, a producer, a festival programmer, a handful of first viewers. Pick a video in your Files, invite people by email, and each of them gets a personal link to a dark, distraction-free screening page. You then see exactly how each person watched, and can ask for their feedback.
+
+- **Send a film privately, or share it publicly:** personal links sent by email in a design you can change, an optional password and expiry date, an open link with email confirmation, or a public link without name or email.
+- **A proper screening room:** subtitles, quality choice, full screen, continue where you left off, and an optional moving watermark with the viewer's name.
+- **See how it was watched:** live status, a heatmap of which parts were actually played, and per viewer every play, pause, jump and device.
+- **Collect feedback:** notes at moments in the film and closing questions, reviewed in your own player with every note on the timeline, live while you watch.
+- **Any video:** browser-ready MP4s stream as they are; ProRes, MKV, HEVC, DNxHR and more are converted on your server with ffmpeg if you allow it.
+- **Hard to copy:** media is only streamed to an open screening page, in short-lived, encrypted pieces, never faster than about three times real time.
+
+**Viewers are tracked.** By default they are told so on the screening page and in the invitation email (the text is editable per screening). Viewing data is deleted after a retention period you choose.
+
+Needs Nextcloud 35, background jobs via cron, and preferably Redis. ffmpeg and a MaxMind GeoIP database are optional.]]></description>
 	<version>0.5.0</version>
-	<licence>agpl</licence>
-	<author mail="guido.vsr@gmail.com">Guido</author>
+	<licence>AGPL-3.0-or-later</licence>
+	<author mail="guido.vsr@gmail.com" homepage="https://github.com/guido-visser/screenings">Guido Visser</author>
 	<namespace>Screenings</namespace>
+	<documentation>
+		<user>https://github.com/guido-visser/screenings#using-it</user>
+		<admin>https://github.com/guido-visser/screenings#installing</admin>
+		<developer>https://github.com/guido-visser/screenings#developer-notes</developer>
+	</documentation>
 	<category>multimedia</category>
-	<bugs>https://example.invalid/screenings/issues</bugs>
+	<website>https://github.com/guido-visser/screenings</website>
+	<bugs>https://github.com/guido-visser/screenings/issues</bugs>
+	<repository type="git">https://github.com/guido-visser/screenings.git</repository>
+	<screenshot>https://raw.githubusercontent.com/guido-visser/screenings/main/docs/screenshots/dashboard.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/guido-visser/screenings/main/docs/screenshots/feedback-notes.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/guido-visser/screenings/main/docs/screenshots/viewer-note.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/guido-visser/screenings/main/docs/screenshots/viewer-activity.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/guido-visser/screenings/main/docs/screenshots/feedback-answers.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/guido-visser/screenings/main/docs/screenshots/viewer-questions.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/guido-visser/screenings/main/docs/screenshots/settings.png</screenshot>
+	<screenshot>https://raw.githubusercontent.com/guido-visser/screenings/main/docs/screenshots/invitation-email.png</screenshot>
 	<dependencies>
 		<php min-version="8.3"/>
 		<nextcloud min-version="35" max-version="35"/>

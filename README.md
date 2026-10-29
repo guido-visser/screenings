@@ -155,7 +155,7 @@ The app appears as **Screenings** in the top navigation. Administrators find its
 | `src/files/`, `src/admin/` | The Files app action and the admin settings |
 | `tests/Unit/` | PHPUnit tests |
 | `dev/` | Docker development stack |
-| `docs/` | [HANDOFF.md](docs/HANDOFF.md) (current state, architecture, decisions), [PLAN.md](docs/PLAN.md), [prepare-hls.md](docs/prepare-hls.md), `screenshots/` |
+| `docs/` | [HANDOFF.md](docs/HANDOFF.md) (current state, architecture, decisions), [app-store.md](docs/app-store.md) (publishing), [PLAN.md](docs/PLAN.md), [prepare-hls.md](docs/prepare-hls.md), `screenshots/` |
 
 ## Development
 
@@ -234,7 +234,7 @@ Revoking an invite or reaching the expiry date stops playback within one heartbe
 sh build/package.sh
 ```
 
-This writes `build/screenings-<version>.tar.gz`, ready to extract into a server's `custom_apps/`. It builds from a clean copy of the repository (tracked and untracked, not ignored files), using local `npm` and `composer` if they are installed and the `node:24-alpine` and `composer:2` Docker images otherwise. The package contains `appinfo/`, `lib/`, `templates/`, `img/`, the production `js/` build without source maps, and only `vendor/maxmind-db/reader` (loaded by the app's own autoloader). For the Nextcloud app store, sign the extracted folder with `occ integrity:sign-app`.
+This writes `build/screenings-<version>.tar.gz`, ready to extract into a server's `custom_apps/`. It builds from a clean copy of the repository (tracked and untracked, not ignored files), using local `npm` and `composer` if they are installed and the `node:24-alpine` and `composer:2` Docker images otherwise. The package contains `appinfo/`, `lib/`, `templates/`, `img/`, the production `js/` build without source maps, and only `vendor/maxmind-db/reader` (loaded by the app's own autoloader). With the App Store key and certificate in `~/.nextcloud/certificates/`, the script also signs the app (`appinfo/signature.json`, made in the running dev stack) and writes `build/screenings-<version>.tar.gz.sig` for the App Store's release form. Publishing step by step, from the certificate request to uploading a release: [docs/app-store.md](docs/app-store.md). Changes per version are in [CHANGELOG.md](CHANGELOG.md). Licence: [AGPL-3.0-or-later](LICENSE).
 
 ## Screenshots
 

@@ -25,7 +25,7 @@ A Nextcloud app for sending tracked private screenings of a film.
    - **A real conversion** (e.g. ProRes or MKV) with the server's ffmpeg 4.2. That version supports every option the app uses (checked), but no full conversion has run there yet.
    - **An automatically added subtitle** next to Bloedtranen (`/RENDERS`), and **an invitation in his own design**.
 2. **Browsers not testable here:** Firefox, Safari (macOS), iPhone/iPad. Watch hls.js with ManagedMediaSource on iOS 17.1+; older iOS falls back to native HLS, which can't send the `X-Screening-Token` header and will fail. Also watch the SameSite=Strict cookie on Safari, `sendBeacon` on page leave, and iPhone's native fullscreen (it gets native controls).
-3. **App store:** signing (`occ integrity:sign-app`) needs a certificate from Nextcloud; `<bugs>` in info.xml is a placeholder.
+3. **App Store:** the repository side is ready (LICENSE, CHANGELOG, complete `info.xml` validated against NC 35's schema, signing in `build/package.sh`, tested with a self-made test certificate: both signatures verify, every packaged file is hashed). What's left is Guido's: the certificate request PR, registering the app, and uploading releases. Step by step in [app-store.md](app-store.md).
 4. **Optional:** a designable one-time-code email, Playwright end-to-end tests, psalm, l10n extraction, a per-day cap on code emails per address, pretty URLs on the server (hosting setting, see the skill).
 
 ## Architecture map

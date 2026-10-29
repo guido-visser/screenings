@@ -29,6 +29,16 @@
 					<span class="tile__label">{{ t('screenings', 'Average watched') }}</span>
 					<span class="tile__value">{{ totals.averagePercent === null ? '–' : Math.round(totals.averagePercent) + '%' }}</span>
 				</div>
+				<template v-if="totals.publicLinkEnabled || totals.publicVisitors">
+					<div class="tile">
+						<span class="tile__label">{{ t('screenings', 'Public views') }}</span>
+						<span class="tile__value">{{ totals.publicViews }}</span>
+					</div>
+					<div class="tile">
+						<span class="tile__label">{{ t('screenings', 'Public visitors') }}</span>
+						<span class="tile__value">{{ totals.publicVisitors }}</span>
+					</div>
+				</template>
 				<a v-if="totals.notes || totals.notesAsked"
 					class="tile tile--link"
 					:href="screeningHash(screening.id, 'notes')">
@@ -58,7 +68,7 @@
 					:summary="heatmapSummary" />
 			</section>
 
-			<section class="dashboard__section">
+			<section v-if="viewers.length || !hasPublic" class="dashboard__section">
 				<h3>{{ t('screenings', 'Viewers') }}</h3>
 				<p v-if="!viewers.length" class="dashboard__muted">
 					{{ t('screenings', 'No invites yet. Add them in Settings, or enable the open link.') }}
@@ -124,6 +134,78 @@
 				</div>
 			</section>
 
+			<section v-if="hasPublic" class="dashboard__section">
+				<h3>{{ t('screenings', 'Public visitors') }}</h3>
+				<p class="dashboard__muted dashboard__intro">
+					{{ t('screenings', 'Everyone who opened the public link, numbered in order of their first visit. A visitor is one browser: the same person on another device, or after clearing cookies, counts as a new visitor.') }}
+				</p>
+				<p v-if="!visitors.length" class="dashboard__muted">
+					{{ totals.publicLinkEnabled
+						? t('screenings', 'Nobody has opened the public link yet.')
+						: t('screenings', 'The public link is switched off.') }}
+				</p>
+				<div v-else class="dashboard__table-wrap">
+					<table class="viewers">
+						<thead>
+							<tr>
+								<th>{{ t('screenings', 'Visitor') }}</th>
+								<th>{{ t('screenings', 'Status') }}</th>
+								<th class="viewers__watched">
+									{{ t('screenings', 'Watched') }}
+								</th>
+								<th class="viewers__num">
+									{{ t('screenings', 'Furthest') }}
+								</th>
+								<th class="viewers__num">
+									{{ t('screenings', 'Views') }}
+								</th>
+								<th>{{ t('screenings', 'Device and location') }}</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr v-for="visitor in visitors"
+								:key="visitor.inviteId"
+								:class="{ 'viewers__row--revoked': visitor.revoked }"
+								@click="open(visitor)">
+								<td>
+									<a :href="screeningHash(screening.id, 'viewer', visitor.inviteId)" class="viewers__name" @click.stop>
+										{{ visitor.name }}
+									</a>
+									<span v-if="visitor.firstSeenAt" class="viewers__email">{{ t('screenings', 'First visit {time}', { time: formatRelative(visitor.firstSeenAt) }) }}</span>
+									<span v-if="visitor.revoked" class="viewers__badge viewers__badge--error">{{ t('screenings', 'Blocked') }}</span>
+								</td>
+								<td>
+									<LiveBadge v-if="visitor.live" :live="visitor.live" />
+									<span v-else-if="visitor.lastSeenAt" class="dashboard__muted">
+										{{ t('screenings', 'Last seen {time}', { time: formatRelative(visitor.lastSeenAt) }) }}
+									</span>
+									<span v-else class="dashboard__muted">{{ t('screenings', 'Opened, not started') }}</span>
+								</td>
+								<td class="viewers__watched">
+									<div class="viewers__bar">
+										<NcProgressBar :value="visitor.percent" size="small" />
+										<span class="viewers__percent">{{ Math.round(visitor.percent) }}%</span>
+									</div>
+								</td>
+								<td class="viewers__num">
+									{{ formatDuration(visitor.furthestS) }}
+								</td>
+								<td class="viewers__num">
+									{{ visitor.opens }}
+								</td>
+								<td class="dashboard__muted">
+									<span>{{ deviceText(visitor.device) ?? '–' }}</span>
+									<span v-if="location(visitor.device)" class="viewers__location">{{ location(visitor.device) }}</span>
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+				<NcButton v-if="visitors.length < totals.publicVisitors" variant="tertiary" @click="showMoreVisitors">
+					{{ t('screenings', 'Show more visitors ({shown} of {total})', { shown: visitors.length, total: totals.publicVisitors }) }}
+				</NcButton>
+			</section>
+
 			<section v-if="pending.length" class="dashboard__section">
 				<h3>{{ t('screenings', 'Asked for a code, not confirmed') }}</h3>
 				<p class="dashboard__muted dashboard__intro">
@@ -170,6 +252,7 @@
 <script setup>
 import { showError } from '@nextcloud/dialogs'
 import { n, t } from '@nextcloud/l10n'
+import NcButton from '@nextcloud/vue/components/NcButton'
 import NcLoadingIcon from '@nextcloud/vue/components/NcLoadingIcon'
 import NcNoteCard from '@nextcloud/vue/components/NcNoteCard'
 import NcProgressBar from '@nextcloud/vue/components/NcProgressBar'
@@ -190,16 +273,22 @@ const FULL_REFRESH_MS = 30000
 const data = ref(null)
 let liveTimer = null
 let fullTimer = null
+let lastNewVisitorLoad = 0
 
 const totals = computed(() => data.value.totals)
 const viewers = computed(() => data.value.viewers)
 const pending = computed(() => data.value.pending ?? [])
-const watchingNow = computed(() => viewers.value.filter((v) => v.live).length)
+const visitors = computed(() => data.value.visitors ?? [])
+const hasPublic = computed(() => totals.value.publicLinkEnabled || totals.value.publicVisitors > 0)
+const watchingNow = computed(() => [...viewers.value, ...visitors.value].filter((v) => v.live).length)
+// Public visitors listed; "show more" adds a page.
+const VISITORS_PAGE = 50
+const visitorLimit = ref(VISITORS_PAGE)
 const heatmapSummary = computed(() => t('screenings', 'Heatmap of the film\'s timeline showing how many of the {count} viewers watched each part. The viewer table below lists each viewer\'s progress.', { count: data.value.heatmap.max }))
 
 async function load() {
 	try {
-		data.value = await api.dashboard(props.screening.id)
+		data.value = await api.dashboard(props.screening.id, visitorLimit.value)
 	} catch (error) {
 		showError(errorMessage(error, t('screenings', 'Could not load the dashboard')))
 	}
@@ -208,7 +297,8 @@ async function load() {
 async function refreshLive() {
 	try {
 		const { live } = await api.live(props.screening.id)
-		for (const viewer of data.value?.viewers ?? []) {
+		const listed = [...(data.value?.viewers ?? []), ...(data.value?.visitors ?? [])]
+		for (const viewer of listed) {
 			const now = live[viewer.inviteId] ?? null
 			// Someone just stopped watching: their totals changed, reload them.
 			if (viewer.live && !now) {
@@ -217,9 +307,21 @@ async function refreshLive() {
 			}
 			viewer.live = now
 		}
+		// A new public visitor started watching: they aren't listed yet. (At
+		// most every 30 s: with more live visitors than listed, some stay unknown.)
+		const known = new Set(listed.map((v) => v.inviteId))
+		if (Object.keys(live).some((id) => !known.has(Number(id))) && Date.now() - lastNewVisitorLoad > FULL_REFRESH_MS) {
+			lastNewVisitorLoad = Date.now()
+			load()
+		}
 	} catch {
 		// Next tick.
 	}
+}
+
+function showMoreVisitors() {
+	visitorLimit.value += VISITORS_PAGE
+	load()
 }
 
 function open(viewer) {

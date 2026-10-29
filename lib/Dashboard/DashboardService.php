@@ -34,7 +34,14 @@ class DashboardService {
 	) {
 	}
 
-	public function overview(Screening $screening): array {
+	/** Public visitors listed on the dashboard; "show more" raises it. */
+	public const VISITORS_PAGE = 50;
+
+	/**
+	 * Totals, the heatmap (everyone who watched, invited or public), the
+	 * invites, and the most recently seen public visitors.
+	 */
+	public function overview(Screening $screening, int $visitorLimit = self::VISITORS_PAGE): array {
 		$invites = $this->invites->findForScreening($screening->getId());
 		$inviteIds = array_map(fn (Invite $i) => $i->getId(), $invites);
 		$sessions = $this->sessions->findForInvites($inviteIds);
@@ -48,6 +55,7 @@ class DashboardService {
 		}
 
 		$viewers = [];
+		$visitors = [];
 		$viewerRanges = [];
 		$watchingNow = 0;
 		foreach ($invites as $invite) {
@@ -63,19 +71,31 @@ class DashboardService {
 			if ($live !== null) {
 				$watchingNow++;
 			}
-			$viewers[] = $this->viewerSummary($invite, $own, $ranges, $opens[$invite->getId()] ?? 0, $durationS, $live);
+			$summary = $this->viewerSummary($invite, $own, $ranges, $opens[$invite->getId()] ?? 0, $durationS, $live);
+			if ($invite->isPublicVisitor()) {
+				$visitors[] = $summary;
+			} else {
+				$viewers[] = $summary;
+			}
 		}
 
-		$started = array_filter($viewers, fn (array $v) => $v['watchedSeconds'] > 0);
+		$everyone = array_merge($viewers, $visitors);
+		$started = array_filter($everyone, fn (array $v) => $v['watchedSeconds'] > 0);
+		// Live visitors first, then by when they were last seen.
+		usort($visitors, fn (array $a, array $b) => [$b['live'] !== null, $b['lastSeenAt'] ?? 0] <=> [$a['live'] !== null, $a['lastSeenAt'] ?? 0]);
 		return [
 			'durationS' => $durationS,
 			'totals' => [
-				'invites' => count($invites),
+				'invites' => count($viewers),
 				'opened' => count(array_filter($viewers, fn (array $v) => $v['opens'] > 0)),
+				// The public link: every page load is a view, every browser a visitor.
+				'publicLinkEnabled' => (bool)$screening->getPublicLinkEnabled(),
+				'publicViews' => array_sum(array_column($visitors, 'opens')),
+				'publicVisitors' => count($visitors),
 				'started' => count($started),
 				'watchingNow' => $watchingNow,
 				'averagePercent' => $started === [] ? null : round(array_sum(array_column($started, 'percent')) / count($started), 1),
-				'totalWatchedSeconds' => round(array_sum(array_column($viewers, 'watchedSeconds')), 1),
+				'totalWatchedSeconds' => round(array_sum(array_column($everyone, 'watchedSeconds')), 1),
 				'notes' => array_sum($this->notes->countByInvite($screening->getId())),
 				'notesAsked' => count(array_filter($invites, fn (Invite $i) => $i->mayLeaveNotes())),
 				'answered' => $this->countAnswered($screening->getId()),
@@ -87,6 +107,7 @@ class DashboardService {
 				'max' => count($viewerRanges),
 			],
 			'viewers' => $viewers,
+			'visitors' => array_slice($visitors, 0, max(1, $visitorLimit)),
 			'pending' => $this->pendingVisitors($screening->getId(), $invites),
 		];
 	}

@@ -1,6 +1,6 @@
 # Handoff: Screenings (Nextcloud app)
 
-**State on 2026-10-27:** version **0.4.3** in `main` (the feedback feature: viewer notes, the owner's review page, closing questions, live updates; plus a fix for low-bitrate Direct MP4s), deployed to Guido's Nextcloud. `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
+**State on 2026-10-29:** version **0.5.0** in `main`: public screenings (a link without name or email; anonymous visitors, fully tracked). **Not deployed**: production runs 0.4.3 (feedback feature and the low-bitrate fix). `main` is pushed and clean. Repo: https://github.com/guido-visser/screenings
 
 **Start here:** read the project skill `.claude/skills/screenings-dev/SKILL.md` before building, testing or deploying. It has the commands, the deploy script, the production quirks and the Windows/Docker pitfalls that cost a lot of time when rediscovered. User-facing behaviour is documented in the [README](../README.md); the original 8-phase plan is in [PLAN.md](PLAN.md) (done, partly superseded).
 
@@ -14,6 +14,7 @@ A Nextcloud app for sending tracked private screenings of a film.
 - **Subtitles:** uploaded by hand, or picked up from files next to the video (`film.en.srt`, `film.nl.forced.srt`, …), automatically on create, on a video change, and whenever such a file is added, changed, copied or renamed.
 - **Invitation email:** HTML the owner designs in the portal (a default plus optional per-screening designs), with `{{placeholders}}`, sections, live preview and test sends.
 - **Feedback:** per invite (never for open-link visitors) the owner can ask for **notes**: the viewer pauses with N or a button and writes a thought stamped with the moment. Notes show as seek-bar markers and in a "My notes" list under the player (jump, edit, delete). Closing questions per screening (rating, choice, text) are asked at the end of the film or via "Give feedback", for invites with questions on. The owner reviews everything in the **Feedback** tab (Notes | Answers): for notes, their own player with colour-coded markers, a note card over the video, a list that follows the film, CSV/SRT export, and a bundled Nextcloud notification.
+- **Public link:** besides personal invites and the open link, a screening can have a public link: no name or email asked. Each browser becomes an anonymous invite (source `public`, "Visitor 14", no email), so tracking, heatmap, budget, resume and the dashboard work unchanged; the dashboard lists visitors separately. Off, or a new link, stops all its visitors; single visitors can be blocked.
 - **Privacy:** an optional, editable tracking notice per screening; data retention per screening (daily job); everything is deleted with its invite, screening or owner.
 
 ## Open items, in order
@@ -49,12 +50,12 @@ lib/
   Tracking/                      TrackingService, WatchRanges, UserAgentParser, GeoIpService, GeoIpUpdater
   Dashboard/                     DashboardService (incl. pendingVisitors), Heatmap
   Mail/                          TemplateRenderer (placeholders, sections, toText, clean), MailTemplateService (resolve: screening → default → built-in), default-invitation.html
-  Service/                       Screening, Invite, Subtitle(+Converter, FileName, Importer), Otp, Mail, Session, Access(+Token), TrackingNotice,
+  Service/                       Screening, Invite, Visitor (public link: anonymous invites, signed cookie, new-visitor limit per IP), Subtitle(+Converter, FileName, Importer), Otp, Mail, Session, Access(+Token), TrackingNotice,
                                  TrackingCleanup, DeliveryModes, AdminSettings, EventLogger, TokenGenerator
   BackgroundJob/                 ProcessMediaJob (queued), GeoIpUpdateJob (weekly), RetentionJob (daily)
   Listener/                      LoadFilesScripts, UserDeleted (deletes the owner's screenings and designs), SubtitleFile (file events)
   Command/ProcessMedia           occ screenings:process-media <id> [--force]
-  Migration/                     1000 all tables · 1001 media_token/warning · 1002 tracking notice · 1003 media_mode · 1004 subtitle source_file_id · 1005 mail templates · 1006 notes + invite feedback switches · 1007 questions + answers
+  Migration/                     1000 all tables · 1001 media_token/warning · 1002 tracking notice · 1003 media_mode · 1004 subtitle source_file_id · 1005 mail templates · 1006 notes + invite feedback switches · 1007 questions + answers · 1008 public link
 src/
   portal/                        App.vue (hash router: router.js; #/email = default design), components/ScreeningView (tabs: Dashboard, Settings, Invitation email),
                                  DashboardView, ViewerDetail, Heatmap, InvitesSection, SubtitlesSection, MediaStatus, MailTemplateEditor, HlsHelp
@@ -77,6 +78,7 @@ tests/Unit/                      104 tests: feedback (note text, position, open-
 - **Subtitle files:** an imported subtitle remembers its file (`source_file_id`) and only that file updates it. Hand uploads are never overwritten, and deleting a file never removes a subtitle (so viewers don't lose subtitles to an accidental delete). The player selects tracks by id, so several tracks can share a language.
 - **Email designs:** placeholder values are always escaped (`{{x}}`, no raw form); scripts and event handlers are stripped; `{{link}}` is required. The preview iframe is `sandbox=""`.
 - **Notes:** the `note_added` event only keeps the note id; the dashboard adds the current text when listing events, so an edited or deleted note leaves no copy in the tracking log. Notes aren't covered by the retention job (the viewer gave them on purpose) but are deleted with their invite, screening or owner (`TrackingCleanupService`). The viewer only gets `notesUrl` in its player config when `Invite::mayLeaveNotes()`; every route checks it again and returns 404 otherwise or for another invite's note.
+- **Public visitors** are invites with source `public` (name "Visitor N", empty email, N = highest existing number + 1). `VisitorService` recognises a browser by `scr_visitor_<screeningId>` = `<inviteId>.<hmac(secret, screening, invite)>` (Lax, 1 year) and creates at most 20 new visitors per IP per hour (distributed cache), because a new visitor means a fresh playback budget. The page stays on the public URL (so it can be shared) and, once the visitor is known, follows the normal invite flow (password cookie per invite, session, resume). A visitor's own invite token is never accepted as a link (`AccessService::resolve`). `AccessService::isRevoked()` = revoked, or a public visitor while the public link is off; `StreamGuard` uses it, so switching the link off stops playback within one heartbeat. A new public link revokes all existing visitors. `InviteService::listForScreening` and the invite counts leave visitors out; `DashboardService::overview` returns them as `visitors` (live first, then last seen; `?visitors=N`), and the heatmap, "started", "watching now" and average include them. The retention job deletes visitors whose sessions have all expired.
 - **Owner preview:** `StreamService` has one core per media type (`hlsContent`, `mp4Content`, `previewSubtitle`) with an optional `StreamContext`: a viewer's context applies the playhead window and budget, null (the owner) skips them. Viewer behaviour is unchanged (`leaktest.sh` still refuses at 92 s). The preview routes are GET with `NoCSRFRequired`, because hls.js and `<video>` fetch them directly; the login cookie and ownership (404 otherwise) authorize them.
 - **Live feedback pages:** `src/portal/poller.js` runs a refresh every 5 s while the tab is visible (and once when it becomes visible again), never overlapping. The Notes page re-fetches all notes plus `/live` (which now includes the viewer's name) and diffs by id and `updatedAt`: unchanged notes keep their object (the card and list don't flicker), new ones get a "New" mark and a clickable toast, viewers keep their colour for as long as the page is open. The Answers page diffs viewers by `answeredAt`. Full re-fetches are fine at this scale (dozens of notes); an ETag or `since` parameter would be the next step if screenings ever get hundreds.
 - **Questions:** saving the editor replaces the whole list; questions keep their id (and answers) while they exist, and lose their answers when deleted or when their kind changes. Answers are saved as a whole form and stored as text (rating "4", the option for a choice); an empty optional answer deletes the row. The player config carries `questions: {url, count, answered, pending}` only for invites with questions on and a screening that has questions; `pending` (finished earlier, never answered: an "ended" event and no answers) shows a reminder bar. The dialog is a modal `<dialog>` outside the player: the top layer also shows it over a fullscreen player. Public-page CSS centres form legends with an id selector (`#body-public form fieldset legend`), hence the id in viewer.css.
@@ -122,7 +124,8 @@ Still open from that review (low risk on a server with few trusted accounts):
 | 5b8d3ac | 0.4.1: feedback phase 3: closing questions (editor, per-invite switch, dialog at the end and "Give feedback", reminder, Feedback → Answers with summaries and CSV, notification) |
 | d7ebe1a | 0.4.2: live Feedback pages: new/edited/deleted notes and answers appear within 5 s, live viewers on the review timeline |
 | a195fae | README rewritten for users, with screenshots of a demo screening; demo-data.py and screenshots.py |
-| (this commit) | 0.4.3: MP4 chunks capped at 20 s of film, so low-bitrate films no longer stall on the playback budget; budget-reload.sh counts what it actually receives |
+| 9ced955 | 0.4.3 (deployed): MP4 chunks capped at 20 s of film, so low-bitrate films no longer stall on the playback budget; budget-reload.sh counts what it actually receives |
+| (this commit) | 0.5.0: public screenings: a link without name or email, anonymous numbered visitors with full tracking, public views/visitors on the dashboard, block per visitor, new-visitor limit per IP |
 
 ## Production (details outside the repo)
 
@@ -159,6 +162,8 @@ Admin login: see `dev/.env` (user `admin`, email `admin@example.test`). Mailpit:
 | Moov Tester | 18 | `vmo2oh1c9wcOeVrgKExWN2OJH2iC2QBl` |
 | Subtitle Tester | 29 | `eZuvoZN5Y6Sw8DoRgDyIh9R63HzE5t5l` |
 | Auto 19 (notes and questions on; a note at 0:03; answered) | 19 | `cGhz56wMdKFcD3aBA6Yw06C9w1y1Hk7C` |
+| Public link of screening 19 (about 20 test visitors) | 19 | see Settings (made new during tests) |
+| Low Bitrate Tester (160 kbit/s film) | 35 | `f9WLo4pKYRTTwyjx5FcHhGSeQlA7I6Fy` |
 | Reviewer B (notes and questions on; 4 notes incl. 0:04, 0:06; answered) | 19 | `DazLnT51U8sW9wkXjqSeR4FV5YuN7KF1` |
 
 Test files are in the admin's Files under `/Films`: test-clip.mp4, slow-start.mp4, hevc.mp4, broken.mp4, long-1080p.mp4 (224 MB), ten-minutes.mp4 (+ `ten-minutes.*.srt`), moov-at-end.mp4, `auto-tests/`, `autosub/`, `Rough cut HLS/`, `Multi HLS/`.

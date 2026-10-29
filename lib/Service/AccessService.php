@@ -24,6 +24,11 @@ class AccessService {
 	public const DENIED_REVOKED = 'revoked';
 	public const DENIED_EXPIRED = 'expired';
 
+	/** Which kind of link a token is. */
+	public const LINK_INVITE = 'invite';
+	public const LINK_OPEN = 'open';
+	public const LINK_PUBLIC = 'public';
+
 	private const ACCESS_COOKIE_PREFIX = 'scr_access_';
 	private const ACCESS_DAYS = 30;
 
@@ -37,18 +42,26 @@ class AccessService {
 	}
 
 	/**
-	 * @return ?array{invite: ?Invite, screening: Screening} null for unknown tokens.
-	 *                                                        invite is null for an open link.
+	 * @return ?array{invite: ?Invite, screening: Screening, link: string} null for unknown tokens.
+	 *                                                                      invite is null for an open or public link.
 	 */
 	public function resolve(string $token): ?array {
 		try {
 			$invite = $this->invites->findByToken($token);
-			return ['invite' => $invite, 'screening' => $this->screenings->findById($invite->getScreeningId())];
+			// A public visitor's own token is never handed out; only the public link counts.
+			return $invite->isPublicVisitor()
+				? null
+				: ['invite' => $invite, 'screening' => $this->screenings->findById($invite->getScreeningId()), 'link' => self::LINK_INVITE];
 		} catch (DoesNotExistException) {
 		}
 		try {
 			$screening = $this->screenings->findByOpenLinkToken($token);
-			return $screening->getOpenLinkEnabled() ? ['invite' => null, 'screening' => $screening] : null;
+			return $screening->getOpenLinkEnabled() ? ['invite' => null, 'screening' => $screening, 'link' => self::LINK_OPEN] : null;
+		} catch (DoesNotExistException) {
+		}
+		try {
+			$screening = $this->screenings->findByPublicLinkToken($token);
+			return $screening->getPublicLinkEnabled() ? ['invite' => null, 'screening' => $screening, 'link' => self::LINK_PUBLIC] : null;
 		} catch (DoesNotExistException) {
 			return null;
 		}
@@ -61,10 +74,17 @@ class AccessService {
 		if ($screening->isExpired($this->time->getTime())) {
 			return self::DENIED_EXPIRED;
 		}
-		if ($invite !== null && $invite->isRevoked()) {
+		if ($invite !== null && self::isRevoked($invite, $screening)) {
 			return self::DENIED_REVOKED;
 		}
 		return null;
+	}
+
+	/**
+	 * Revoked by the owner, or a public visitor while the public link is off.
+	 */
+	public static function isRevoked(Invite $invite, Screening $screening): bool {
+		return $invite->isRevoked() || ($invite->isPublicVisitor() && !$screening->getPublicLinkEnabled());
 	}
 
 	public function needsPassword(Invite $invite, Screening $screening, IRequest $request): bool {

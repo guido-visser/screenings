@@ -121,12 +121,29 @@
 							{{ t('screenings', 'New link') }}
 						</NcButton>
 					</div>
+					<NcCheckboxRadioSwitch v-model="form.publicLinkEnabled" type="switch">
+						{{ t('screenings', 'Public link: anyone with it can watch, without giving a name or email') }}
+					</NcCheckboxRadioSwitch>
+					<p v-if="form.publicLinkEnabled" class="screening__status">
+						{{ t('screenings', 'Everything is still tracked: visitors appear on the dashboard as "Visitor 1", "Visitor 2", … with their device, location and what they watched. Switch this off, or make a new link, to stop everyone who came through it.') }}
+					</p>
+					<div v-if="screening.publicLinkEnabled && screening.publicLinkToken" class="screening__open-link">
+						<code>{{ publicScreeningLink }}</code>
+						<NcButton :aria-label="t('screenings', 'Copy public link')" variant="tertiary" @click="copyLink(publicScreeningLink)">
+							<template #icon>
+								<NcIconSvgWrapper :path="mdiContentCopy" />
+							</template>
+						</NcButton>
+						<NcButton variant="tertiary" @click="regeneratePublicLink">
+							{{ t('screenings', 'New link') }}
+						</NcButton>
+					</div>
 				</section>
 
 				<section class="screening__section">
 					<h3>{{ t('screenings', 'Playback and data') }}</h3>
 					<NcCheckboxRadioSwitch v-model="form.watermark" type="switch">
-						{{ t('screenings', 'Show the viewer\'s name and email as a watermark') }}
+						{{ t('screenings', 'Show a watermark with the viewer\'s name and email (public visitors: their number and the date)') }}
 					</NcCheckboxRadioSwitch>
 					<NcCheckboxRadioSwitch v-model="form.trackingNoticeEnabled" type="switch">
 						{{ t('screenings', 'Tell viewers that their viewing is tracked') }}
@@ -262,6 +279,7 @@ const reprocessing = ref(false)
 let pollTimer = null
 
 const openLink = computed(() => publicLink(screening.value.openLinkToken))
+const publicScreeningLink = computed(() => publicLink(screening.value.publicLinkToken))
 const mediaFormChanged = computed(() => form.value.deliveryMode !== screening.value.deliveryMode
 	|| form.value.sourcePath !== screening.value.sourcePath)
 const mediaBusy = computed(() => ['pending', 'processing'].includes(screening.value?.mediaStatus))
@@ -315,6 +333,7 @@ function toForm(s) {
 		password: '',
 		expiresAt: s.expiresAt ? new Date(s.expiresAt * 1000) : null,
 		openLinkEnabled: s.openLinkEnabled,
+		publicLinkEnabled: s.publicLinkEnabled,
 		watermark: s.watermark,
 		trackingNoticeEnabled: s.trackingNoticeEnabled,
 		trackingNotice: s.trackingNotice ?? defaultTrackingNotice,
@@ -341,6 +360,7 @@ const changes = computed(() => {
 	const expiresAt = f.expiresAt ? Math.floor(f.expiresAt.getTime() / 1000) : null
 	if (expiresAt !== s.expiresAt) out.expiresAt = expiresAt
 	if (f.openLinkEnabled !== s.openLinkEnabled) out.openLinkEnabled = f.openLinkEnabled
+	if (f.publicLinkEnabled !== s.publicLinkEnabled) out.publicLinkEnabled = f.publicLinkEnabled
 	if (f.watermark !== s.watermark) out.watermark = f.watermark
 	if (f.trackingNoticeEnabled !== s.trackingNoticeEnabled) out.trackingNoticeEnabled = f.trackingNoticeEnabled
 	// The default text (or an emptied field) is stored as "no custom text", so it stays translated.
@@ -384,6 +404,17 @@ async function removePassword() {
 		showSuccess(t('screenings', 'Password removed'))
 	} catch (error) {
 		showError(errorMessage(error, t('screenings', 'Could not remove the password')))
+	}
+}
+
+async function regeneratePublicLink() {
+	if (!window.confirm(t('screenings', 'The current public link will stop working, and everyone who is watching through it is stopped. Continue?'))) {
+		return
+	}
+	try {
+		applySaved(await api.regeneratePublicLink(props.screeningId))
+	} catch (error) {
+		showError(errorMessage(error, t('screenings', 'Could not create a new link')))
 	}
 }
 

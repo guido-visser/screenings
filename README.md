@@ -10,7 +10,7 @@ Nothing leaves your server. There is no third-party video host, and the film is 
 
 ## What it does
 
-- **Send a film privately.** Personal links per viewer, sent by email in a design you can change, or copied and shared yourself. Optionally a password, an expiry date, and an open link that anyone can use after confirming their email address.
+- **Send a film privately, or share it publicly.** Personal links per viewer, sent by email in a design you can change, or copied and shared yourself. Optionally a password, an expiry date, an open link that anyone can use after confirming their email address, and a public link that needs no name or email at all, with every visitor still tracked.
 - **A proper screening room.** Viewers get a clean player with subtitles, quality choice and full screen, and pick up where they left off when they come back. An optional moving watermark shows their name and email over the film.
 - **See how it was watched.** A dashboard per screening with live status, a heatmap of which parts were actually played, and per viewer every play, pause, jump, subtitle change and device.
 - **Collect feedback.** Viewers can leave notes at a moment in the film and answer a few closing questions. You review the notes in your own player, with every note as a marker on the timeline, and see the answers summarised. Both update live while you have the page open.
@@ -93,8 +93,9 @@ Files with any other word after the video's name are ignored (`film-trailer.en.s
 
 - **Personal invites:** a name and an email address. Send the invitation by email right away, later, or copy the link and share it yourself. Revoke access at any time; playback stops within seconds.
 - **Open link:** one link for anyone. Visitors confirm their email address with a code before they can watch, and then continue on a personal link of their own. Visitors who requested a code but never entered it are listed on the dashboard.
+- **Public link:** one link for anyone, with no name or email address asked. Everything is still tracked: each browser becomes an anonymous visitor ("Visitor 1", "Visitor 2", …) with its device, location, what it watched and a full activity timeline, and counts towards the heatmap. The dashboard adds tiles for public views and visitors, and lists the visitors, most recent first. The password and expiry date apply to the public link too, and the watermark shows the visitor's number and the date. Switch the link off, or make a new one, and playback stops within seconds for everyone who came through it; you can also block a single visitor. Public visitors can't leave notes or answer the closing questions. A visitor is a browser, so the same person on another device (or after clearing cookies) counts again; to keep that from being abused, new visitors are limited to 20 per IP address per hour.
 - **Password and expiry:** a screening password (not included in the email; share it separately) and an end date after which nothing plays.
-- **Notes and questions** are switched on per invite (when adding it, in its menu, or for everyone at once from the menu next to the Invites heading). Open-link visitors never get them.
+- **Notes and questions** are switched on per invite (when adding it, in its menu, or for everyone at once from the menu next to the Invites heading). Open-link and public visitors never get them.
 
 ### What is tracked
 
@@ -116,7 +117,7 @@ That stops copying a link into a download tool, and sharing a link that keeps wo
 
 ### Data retention and privacy
 
-- Viewing data (sessions, watched parts, events) is deleted after each screening's retention period (default 365 days). The list of invites stays.
+- Viewing data (sessions, watched parts, events) is deleted after each screening's retention period (default 365 days). The list of invites stays; public visitors whose viewing data has expired are deleted too.
 - Notes and answers are kept until you delete the invite or the screening: viewers gave them to you on purpose.
 - Deleting an invite or a screening deletes all of its data right away, including the encrypted copy of the film. Deleting a Nextcloud account deletes all of its screenings.
 
@@ -225,6 +226,7 @@ Revoking an invite or reaching the expiry date stops playback within one heartbe
 | Creating invites | 300 per owner per hour |
 | Player events | 1500 per viewer session per hour |
 | Viewer notes | 60 per invite per hour, 2000 characters each |
+| New public-link visitors | 20 per IP address per hour (returning visitors aren't counted) |
 
 ## Building a release
 

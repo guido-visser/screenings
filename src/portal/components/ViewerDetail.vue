@@ -11,10 +11,14 @@
 			<header class="viewer-detail__header">
 				<div>
 					<h3>{{ viewer.name }}</h3>
-					<span class="viewer-detail__muted">{{ viewer.email }}</span>
+					<span class="viewer-detail__muted">{{ viewer.source === 'public' ? t('screenings', 'Anonymous visitor of the public link') : viewer.email }}</span>
 				</div>
-				<span v-if="viewer.revoked" class="viewer-detail__badge viewer-detail__badge--error">{{ t('screenings', 'Revoked') }}</span>
+				<span v-if="viewer.revoked" class="viewer-detail__badge viewer-detail__badge--error">{{ viewer.source === 'public' ? t('screenings', 'Blocked') : t('screenings', 'Revoked') }}</span>
 				<span v-else-if="viewer.source === 'open_link'" class="viewer-detail__badge">{{ t('screenings', 'Via open link') }}</span>
+				<!-- Personal invites are revoked in Settings; public visitors only appear here. -->
+				<NcButton v-if="viewer.source === 'public'" class="viewer-detail__block" :disabled="blocking" @click="setBlocked(!viewer.revoked)">
+					{{ viewer.revoked ? t('screenings', 'Unblock') : t('screenings', 'Block this visitor') }}
+				</NcButton>
 			</header>
 
 			<section v-if="viewer.live" class="viewer-detail__live" aria-live="polite">
@@ -187,6 +191,24 @@ function deviceLabel(type) {
 	return { mobile: t('screenings', 'phone'), tablet: t('screenings', 'tablet') }[type] ?? type
 }
 
+const blocking = ref(false)
+
+/** Stops (or allows again) this public visitor; playback ends within seconds. */
+async function setBlocked(blocked) {
+	if (blocked && !window.confirm(t('screenings', 'Block {name}? Playback stops for them within seconds. Someone who clears their cookies or uses another device comes back as a new visitor.', { name: viewer.value.name }))) {
+		return
+	}
+	blocking.value = true
+	try {
+		await api.setInviteRevoked(viewer.value.inviteId, blocked)
+		await load()
+	} catch (error) {
+		showError(errorMessage(error, t('screenings', 'Could not change access')))
+	} finally {
+		blocking.value = false
+	}
+}
+
 async function load() {
 	try {
 		data.value = await api.viewerActivity(props.inviteId)
@@ -254,6 +276,10 @@ onBeforeUnmount(() => window.clearInterval(timer))
 	display: flex;
 	align-items: center;
 	gap: 12px;
+}
+
+.viewer-detail__block {
+	margin-inline-start: auto;
 }
 
 .viewer-detail__header h3 {

@@ -39,10 +39,12 @@ class InviteService {
 	}
 
 	/**
+	 * Personal and open-link invites; public visitors are on the dashboard.
+	 *
 	 * @return Invite[]
 	 */
 	public function listForScreening(int $screeningId): array {
-		return $this->mapper->findForScreening($screeningId);
+		return array_values(array_filter($this->mapper->findForScreening($screeningId), fn (Invite $i) => !$i->isPublicVisitor()));
 	}
 
 	/**
@@ -131,8 +133,8 @@ class InviteService {
 	 * @throws ValidationException
 	 */
 	public function setFeedback(Invite $invite, ?bool $allowNotes, ?bool $askQuestions): Invite {
-		if ($invite->getSource() === Invite::SOURCE_OPEN_LINK && ($allowNotes || $askQuestions)) {
-			throw new ValidationException("Visitors from the open link can't leave feedback");
+		if ($invite->getSource() !== Invite::SOURCE_INVITED && ($allowNotes || $askQuestions)) {
+			throw new ValidationException("Visitors from the open or public link can't leave feedback");
 		}
 		if ($allowNotes !== null) {
 			$invite->setAllowNotes($allowNotes);
@@ -152,7 +154,7 @@ class InviteService {
 	public function setFeedbackForAll(int $screeningId, ?bool $allowNotes, ?bool $askQuestions): array {
 		$invites = $this->mapper->findForScreening($screeningId);
 		foreach ($invites as $invite) {
-			if ($invite->getSource() !== Invite::SOURCE_OPEN_LINK) {
+			if ($invite->getSource() === Invite::SOURCE_INVITED) {
 				$this->setFeedback($invite, $allowNotes, $askQuestions);
 			}
 		}

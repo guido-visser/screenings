@@ -41,9 +41,9 @@ class DashboardController extends Controller {
 
 	#[NoAdminRequired]
 	#[FrontpageRoute(verb: 'GET', url: '/api/screenings/{id}/dashboard', requirements: ['id' => '\d+'])]
-	public function overview(int $id): JSONResponse {
+	public function overview(int $id, int $visitors = DashboardService::VISITORS_PAGE): JSONResponse {
 		try {
-			return new JSONResponse($this->dashboard->overview($this->screenings->get($id, $this->uid())));
+			return new JSONResponse($this->dashboard->overview($this->screenings->get($id, $this->uid()), min(5000, max(1, $visitors))));
 		} catch (NotFoundException $e) {
 			return new JSONResponse(['message' => $e->getMessage()], Http::STATUS_NOT_FOUND);
 		}

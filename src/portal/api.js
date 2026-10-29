@@ -61,6 +61,10 @@ export default {
 	async reprocessMedia(id) {
 		return (await axios.post(url(`/screenings/${id}/media/reprocess`))).data
 	},
+	/** A new public link; everyone who came through the old one is blocked. */
+	async regeneratePublicLink(id) {
+		return (await axios.post(url(`/screenings/${id}/public-link/regenerate`))).data
+	},
 	async regenerateOpenLink(id) {
 		return (await axios.post(url(`/screenings/${id}/open-link/regenerate`))).data
 	},
@@ -83,8 +87,9 @@ export default {
 	},
 
 	/** The result has `mailError` when the invite was created but the email failed. */
-	async dashboard(screeningId) {
-		return (await axios.get(url(`/screenings/${screeningId}/dashboard`))).data
+	/** visitors: how many public visitors to list (most recently seen first). */
+	async dashboard(screeningId, visitors = 50) {
+		return (await axios.get(url(`/screenings/${screeningId}/dashboard`), { params: { visitors } })).data
 	},
 	async live(screeningId) {
 		return (await axios.get(url(`/screenings/${screeningId}/live`))).data

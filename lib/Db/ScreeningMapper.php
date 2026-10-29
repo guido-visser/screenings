@@ -69,6 +69,17 @@ class ScreeningMapper extends QBMapper {
 	}
 
 	/**
+	 * @throws DoesNotExistException
+	 */
+	public function findByPublicLinkToken(string $token): Screening {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('*')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('public_link_token', $qb->createNamedParameter($token)));
+		return $this->findEntity($qb);
+	}
+
+	/**
 	 * @return array<int, int> source file id => id of the newest screening using it
 	 */
 	public function findIdsBySourceForOwner(string $ownerUid): array {

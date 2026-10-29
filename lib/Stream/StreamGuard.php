@@ -8,6 +8,7 @@ use OCA\Screenings\Db\InviteMapper;
 use OCA\Screenings\Db\Screening;
 use OCA\Screenings\Db\ScreeningMapper;
 use OCA\Screenings\Db\ViewerSessionMapper;
+use OCA\Screenings\Service\AccessService;
 use OCA\Screenings\Service\SessionService;
 use OCP\AppFramework\Db\DoesNotExistException;
 use OCP\AppFramework\Utility\ITimeFactory;
@@ -67,7 +68,7 @@ class StreamGuard {
 		if ($fromCookie->getId() !== $session->getId() || $session->getEndedAt() !== null) {
 			throw new StreamDenied(StreamDenied::REPLACED);
 		}
-		if ($invite->isRevoked()) {
+		if (AccessService::isRevoked($invite, $screening)) {
 			throw new StreamDenied(StreamDenied::REVOKED);
 		}
 		$now = $this->time->getTime();

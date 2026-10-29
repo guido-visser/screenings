@@ -151,6 +151,25 @@ class ScreeningService {
 	/**
 	 * @throws NotFoundException
 	 */
+	/**
+	 * A new public link. The old one stops working, and so does watching for
+	 * everyone who came through it: their visitor records are revoked.
+	 *
+	 * @throws NotFoundException
+	 */
+	public function regeneratePublicLink(int $id, string $uid): Screening {
+		$screening = $this->get($id, $uid);
+		$now = $this->time->getTime();
+		$screening->setPublicLinkToken($this->tokens->linkToken());
+		$screening->setUpdatedAt($now);
+		$screening = $this->mapper->update($screening);
+		$this->inviteMapper->revokePublicVisitors($id, $now);
+		return $screening;
+	}
+
+	/**
+	 * @throws NotFoundException
+	 */
 	public function regenerateOpenLink(int $id, string $uid): Screening {
 		$screening = $this->get($id, $uid);
 		$screening->setOpenLinkToken($this->tokens->linkToken());
@@ -265,6 +284,14 @@ class ScreeningService {
 
 		if (array_key_exists('openLinkEnabled', $data)) {
 			$screening->setOpenLinkEnabled((bool)$data['openLinkEnabled']);
+		}
+
+		if (array_key_exists('publicLinkEnabled', $data)) {
+			// Switching it off stops every public visitor (see AccessService::denial).
+			$screening->setPublicLinkEnabled((bool)$data['publicLinkEnabled']);
+			if ($screening->getPublicLinkEnabled() && $screening->getPublicLinkToken() === null) {
+				$screening->setPublicLinkToken($this->tokens->linkToken());
+			}
 		}
 
 		if (array_key_exists('trackingNoticeEnabled', $data)) {

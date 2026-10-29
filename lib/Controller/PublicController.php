@@ -14,6 +14,7 @@ use OCA\Screenings\Service\MailService;
 use OCA\Screenings\Service\OtpService;
 use OCA\Screenings\Service\SessionService;
 use OCA\Screenings\Service\TrackingNotice;
+use OCA\Screenings\Service\VisitorService;
 use OCA\Screenings\Stream\StreamContext;
 use OCA\Screenings\Stream\StreamService;
 use OCP\AppFramework\Controller;
@@ -27,18 +28,21 @@ use OCP\AppFramework\Http\Attribute\PublicPage;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\AppFramework\Services\IInitialState;
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IL10N;
 use OCP\IRequest;
 use OCP\IUserManager;
 use OCP\Util;
 
 /**
- * The viewer-facing screening page, reached through a personal invite link
- * or a screening's open link.
+ * The viewer-facing screening page, reached through a personal invite link,
+ * a screening's open link, or its public link (anonymous visitors, see
+ * VisitorService).
  *
  * The page renders one of these states (passed to the viewer bundle):
  *   unavailable  unknown, deleted or disabled link
- *   revoked      the owner revoked this invite
+ *   busy         public link: too many new visitors from this address
+ *   revoked      the owner revoked this invite (or switched the public link off)
  *   expired      the screening's expiry date has passed
  *   email        open link: ask for name and email, then a mailed code
  *   password     the screening has a password this browser hasn't entered
@@ -56,6 +60,8 @@ class PublicController extends Controller {
 		private MailService $mail,
 		private EventLogger $events,
 		private StreamService $stream,
+		private VisitorService $visitors,
+		private ITimeFactory $time,
 		private TrackingNotice $trackingNotice,
 		private IInitialState $initialState,
 		private IUserManager $userManager,
@@ -78,9 +84,19 @@ class PublicController extends Controller {
 			return $this->render($response, $token, 'unavailable');
 		}
 
-		['invite' => $invite, 'screening' => $screening] = $resolved;
+		['invite' => $invite, 'screening' => $screening, 'link' => $link] = $resolved;
+		// A public visitor becomes (or already is) an anonymous invite, and from
+		// here on is treated like one: password, resume, session, tracking.
+		if ($link === AccessService::LINK_PUBLIC && !$screening->isExpired($this->time->getTime())) {
+			try {
+				$invite = $this->visitors->findOrCreate($screening, $this->request, $response);
+			} catch (ValidationException) {
+				$response->setStatus(Http::STATUS_TOO_MANY_REQUESTS);
+				return $this->render($response, $token, 'busy', $screening);
+			}
+		}
 		$this->events->log($screening->getId(), $invite?->getId(), null, EventLogger::PAGE_OPEN, array_filter([
-			'link' => $invite === null ? 'open' : 'invite',
+			'link' => $link,
 			'referrer' => $this->request->getHeader('Referer') ?: null,
 		]));
 
@@ -121,6 +137,10 @@ class PublicController extends Controller {
 	#[FrontpageRoute(verb: 'POST', url: '/s/{token}/password', requirements: ['token' => self::TOKEN])]
 	public function unlock(string $token, string $password = ''): JSONResponse {
 		$resolved = $this->access->resolve($token);
+		if ($resolved !== null && $resolved['link'] === AccessService::LINK_PUBLIC) {
+			// The page made this browser a visitor before asking for the password.
+			$resolved['invite'] = $this->visitors->find($resolved['screening'], $this->request);
+		}
 		if ($resolved === null || $resolved['invite'] === null
 			|| $this->access->denial($resolved['invite'], $resolved['screening']) !== null) {
 			return new JSONResponse(['message' => $this->l->t('This link is not available')], Http::STATUS_NOT_FOUND);
@@ -186,7 +206,7 @@ class PublicController extends Controller {
 
 	private function openLinkScreening(string $token): ?Screening {
 		$resolved = $this->access->resolve($token);
-		if ($resolved === null || $resolved['invite'] !== null
+		if ($resolved === null || $resolved['link'] !== AccessService::LINK_OPEN
 			|| $this->access->denial(null, $resolved['screening']) !== null) {
 			return null;
 		}
@@ -210,6 +230,8 @@ class PublicController extends Controller {
 			'viewer' => $invite === null ? null : [
 				'name' => $invite->getName(),
 				'email' => $invite->getEmail(),
+				// Anonymous: no "For …" line; the watermark shows the visitor number and date.
+				'public' => $invite->isPublicVisitor(),
 			],
 		]);
 		Util::addScript(Application::APP_ID, Application::APP_ID . '-viewer');

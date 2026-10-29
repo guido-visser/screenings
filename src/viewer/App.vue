@@ -117,6 +117,8 @@ const message = computed(() => {
 				? t('screenings', '"{title}" is no longer available.', { title: screening.title })
 				: t('screenings', 'This screening is no longer available.'),
 		}
+	case 'busy':
+		return { title: screening.title, text: t('screenings', 'Too many new visits from your network. Please try again in an hour.') }
 	case 'not_ready':
 		return { title: screening.title, text: t('screenings', 'The film is still being prepared. Please try again later.') }
 	default:

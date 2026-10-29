@@ -68,7 +68,40 @@ class InviteMapper extends QBMapper {
 	}
 
 	/**
-	 * @return array<int, int> screening id => invite count
+	 * Names of a screening's public visitors ("Visitor 14"), for numbering.
+	 *
+	 * @return list<string>
+	 */
+	public function publicVisitorNames(int $screeningId): array {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('name')
+			->from($this->getTableName())
+			->where($qb->expr()->eq('screening_id', $qb->createNamedParameter($screeningId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('source', $qb->createNamedParameter(Invite::SOURCE_PUBLIC)));
+		$result = $qb->executeQuery();
+		$names = [];
+		while ($row = $result->fetch()) {
+			$names[] = (string)$row['name'];
+		}
+		$result->closeCursor();
+		return $names;
+	}
+
+	/**
+	 * Revokes every visitor of a screening's public link (a new link was made).
+	 */
+	public function revokePublicVisitors(int $screeningId, int $now): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->update($this->getTableName())
+			->set('revoked_at', $qb->createNamedParameter($now, IQueryBuilder::PARAM_INT))
+			->where($qb->expr()->eq('screening_id', $qb->createNamedParameter($screeningId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('source', $qb->createNamedParameter(Invite::SOURCE_PUBLIC)))
+			->andWhere($qb->expr()->isNull('revoked_at'))
+			->executeStatement();
+	}
+
+	/**
+	 * @return array<int, int> screening id => invite count (public visitors not included)
 	 */
 	public function countByScreening(array $screeningIds): array {
 		if ($screeningIds === []) {
@@ -79,6 +112,7 @@ class InviteMapper extends QBMapper {
 			->selectAlias($qb->func()->count('id'), 'cnt')
 			->from($this->getTableName())
 			->where($qb->expr()->in('screening_id', $qb->createNamedParameter($screeningIds, IQueryBuilder::PARAM_INT_ARRAY)))
+			->andWhere($qb->expr()->neq('source', $qb->createNamedParameter(Invite::SOURCE_PUBLIC)))
 			->groupBy('screening_id');
 		$result = $qb->executeQuery();
 		$counts = [];

@@ -42,6 +42,10 @@ use OCP\AppFramework\Db\Entity;
  * @method void setOpenLinkToken(string $openLinkToken)
  * @method ?bool getOpenLinkEnabled()
  * @method void setOpenLinkEnabled(bool $openLinkEnabled)
+ * @method ?string getPublicLinkToken()
+ * @method void setPublicLinkToken(?string $publicLinkToken)
+ * @method ?bool getPublicLinkEnabled()
+ * @method void setPublicLinkEnabled(bool $publicLinkEnabled)
  * @method ?bool getTrackingNoticeEnabled()
  * @method void setTrackingNoticeEnabled(bool $trackingNoticeEnabled)
  * @method ?string getTrackingNotice()
@@ -87,6 +91,8 @@ class Screening extends Entity implements JsonSerializable {
 	protected $watermark;
 	protected $openLinkToken;
 	protected $openLinkEnabled;
+	protected $publicLinkToken;
+	protected $publicLinkEnabled;
 	protected $trackingNoticeEnabled;
 	protected $trackingNotice;
 	protected $retentionDays;
@@ -100,6 +106,7 @@ class Screening extends Entity implements JsonSerializable {
 		$this->addType('expiresAt', 'integer');
 		$this->addType('watermark', 'boolean');
 		$this->addType('openLinkEnabled', 'boolean');
+		$this->addType('publicLinkEnabled', 'boolean');
 		$this->addType('trackingNoticeEnabled', 'boolean');
 		$this->addType('retentionDays', 'integer');
 		$this->addType('createdAt', 'integer');
@@ -140,6 +147,8 @@ class Screening extends Entity implements JsonSerializable {
 			'watermark' => (bool)$this->watermark,
 			'openLinkToken' => $this->openLinkToken,
 			'openLinkEnabled' => (bool)$this->openLinkEnabled,
+			'publicLinkToken' => $this->publicLinkToken,
+			'publicLinkEnabled' => (bool)$this->publicLinkEnabled,
 			'trackingNoticeEnabled' => $this->trackingNoticeEnabled !== false,
 			'trackingNotice' => $this->trackingNotice,
 			'retentionDays' => $this->retentionDays,

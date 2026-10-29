@@ -34,6 +34,8 @@ use OCP\AppFramework\Db\Entity;
 class Invite extends Entity implements JsonSerializable {
 	public const SOURCE_INVITED = 'invited';
 	public const SOURCE_OPEN_LINK = 'open_link';
+	/** An anonymous visitor of the public link ("Visitor 14", no email). */
+	public const SOURCE_PUBLIC = 'public';
 
 	protected $screeningId;
 	protected $token;
@@ -62,15 +64,19 @@ class Invite extends Entity implements JsonSerializable {
 	}
 
 	/**
-	 * Open-link visitors never give feedback; invited viewers only when the
-	 * owner turned it on for them.
+	 * Open-link and public visitors never give feedback; invited viewers only
+	 * when the owner turned it on for them.
 	 */
 	public function mayLeaveNotes(): bool {
-		return $this->source !== self::SOURCE_OPEN_LINK && (bool)$this->allowNotes;
+		return $this->source === self::SOURCE_INVITED && (bool)$this->allowNotes;
 	}
 
 	public function mayAnswerQuestions(): bool {
-		return $this->source !== self::SOURCE_OPEN_LINK && (bool)$this->askQuestions;
+		return $this->source === self::SOURCE_INVITED && (bool)$this->askQuestions;
+	}
+
+	public function isPublicVisitor(): bool {
+		return $this->source === self::SOURCE_PUBLIC;
 	}
 
 	public function jsonSerialize(): array {

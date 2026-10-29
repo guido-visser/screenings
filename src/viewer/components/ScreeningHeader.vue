@@ -1,10 +1,12 @@
 <template>
 	<header class="screening-header" :class="{ 'screening-header--wide': wide }">
 		<p class="screening-header__kicker">
-			{{ t('screenings', 'Private screening from {owner}', { owner: screening.owner }) }}
+			{{ viewer?.public
+				? t('screenings', 'A screening from {owner}', { owner: screening.owner })
+				: t('screenings', 'Private screening from {owner}', { owner: screening.owner }) }}
 		</p>
 		<h1>{{ screening.title }}</h1>
-		<p v-if="viewer" class="screening-header__viewer">
+		<p v-if="viewer && !viewer.public" class="screening-header__viewer">
 			{{ t('screenings', 'For {name}', { name: viewer.name }) }}
 		</p>
 		<p v-if="screening.description" class="screening-header__description">

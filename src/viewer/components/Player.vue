@@ -197,7 +197,7 @@ import {
 	mdiVolumeHigh,
 	mdiVolumeOff,
 } from '@mdi/js'
-import { t } from '@nextcloud/l10n'
+import { getLanguage, t } from '@nextcloud/l10n'
 import Hls from 'hls.js'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { formatTime, Heartbeat, RangeRecorder, Tracker } from '../playback.js'
@@ -285,7 +285,18 @@ const stopMessage = computed(() => stopMessages[stopReason.value]
 
 // --- Watermark --------------------------------------------------------------
 
-const watermark = computed(() => props.screening.watermark ? `${props.viewer.name} · ${props.viewer.email}` : null)
+// Public visitors have no name or email: their number and today's date
+// still tie a recording to a session on the owner's dashboard.
+const watermark = computed(() => {
+	if (!props.screening.watermark) {
+		return null
+	}
+	if (props.viewer.public) {
+		const today = new Date().toLocaleDateString(getLanguage(), { day: 'numeric', month: 'short', year: 'numeric' })
+		return `${props.viewer.name} · ${today}`
+	}
+	return `${props.viewer.name} · ${props.viewer.email}`
+})
 const watermarkPosition = ref({ x: 10, y: 12 })
 const watermarkStyle = computed(() => ({
 	left: watermarkPosition.value.x + '%',

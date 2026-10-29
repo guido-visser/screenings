@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\Screenings\Service;
 
+use OCA\Screenings\Db\Invite;
 use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 
@@ -72,7 +73,39 @@ class TrackingCleanupService {
 			->where($qb->expr()->eq('screening_id', $qb->createNamedParameter($screeningId, IQueryBuilder::PARAM_INT)))
 			->andWhere($qb->expr()->lt('server_ts_ms', $qb->createNamedParameter($cutoff * 1000, IQueryBuilder::PARAM_INT)))
 			->executeStatement();
+		$this->deleteIdleVisitors($screeningId, $cutoff);
 		return $deleted;
+	}
+
+	/**
+	 * Public visitors are nothing but their viewing data: once that has
+	 * expired, the anonymous invite goes too.
+	 */
+	private function deleteIdleVisitors(int $screeningId, int $cutoff): void {
+		$qb = $this->db->getQueryBuilder();
+		$qb->select('id')
+			->from('scr_invites')
+			->where($qb->expr()->eq('screening_id', $qb->createNamedParameter($screeningId, IQueryBuilder::PARAM_INT)))
+			->andWhere($qb->expr()->eq('source', $qb->createNamedParameter(Invite::SOURCE_PUBLIC)))
+			->andWhere($qb->expr()->lt('created_at', $qb->createNamedParameter($cutoff, IQueryBuilder::PARAM_INT)));
+		$candidates = $this->fetchIds($qb);
+		foreach (array_chunk($candidates, 500) as $chunk) {
+			$busy = $this->db->getQueryBuilder();
+			$busy->selectDistinct('invite_id')
+				->from('scr_sessions')
+				->where($busy->expr()->in('invite_id', $busy->createNamedParameter($chunk, IQueryBuilder::PARAM_INT_ARRAY)));
+			$result = $busy->executeQuery();
+			$withSessions = [];
+			while ($row = $result->fetch()) {
+				$withSessions[] = (int)$row['invite_id'];
+			}
+			$result->closeCursor();
+			$idle = array_values(array_diff($chunk, $withSessions));
+			if ($idle !== []) {
+				$this->deleteIn('scr_events', 'invite_id', $idle);
+				$this->deleteIn('scr_invites', 'id', $idle);
+			}
+		}
 	}
 
 	/**
